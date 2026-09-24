@@ -88,7 +88,13 @@ RUN cd /tmp && \
 USER 1234:0
 WORKDIR /home/senuser
 
-# Clone and build spyre-inference using LATEST main branch (no pinning)
+# Clone and build spyre-inference using LATEST main branch.
+# torch-spyre is pinned to the last known-good commit (e6aa9482, Aug 26 2026 — same as v19)
+# by overriding the rev in uv.lock before running uv sync --frozen.
+# Background: commit 336dad30 (Sep 23 2026) introduced a circular import in
+# torch_spyre/__init__.py that prevents torch from loading on Spyre hardware.
+# Remove this sed override once the upstream circular import is fixed and verified.
+ENV TORCH_SPYRE_GOOD_REV="e6aa948241db265ccd69e44dbb825691a4cc423c"
 RUN git clone https://github.com/torch-spyre/spyre-inference.git && \
     cd spyre-inference && \
     export SPYRE_COMMS_INSTALL_DIR=/opt/ibm/spyre/spyre-comms && \
@@ -96,7 +102,10 @@ RUN git clone https://github.com/torch-spyre/spyre-inference.git && \
     export LD_LIBRARY_PATH="${UCX_INSTALL_PREFIX}/lib:${NIXL_INSTALL_PREFIX}/lib64:$LD_LIBRARY_PATH" && \
     export PKG_CONFIG_PATH="${UCX_INSTALL_PREFIX}/lib/pkgconfig:$PKG_CONFIG_PATH" && \
     export PYTHONPATH="${NIXL_INSTALL_PREFIX}/lib64/python3.12/site-packages:$PYTHONPATH" && \
-    uv sync 2>&1 | tee /home/senuser/spyre-inference-build.log && \
+    BAD_REV=$(grep -oP '(?<=torch-spyre\?rev=)[^"]+' uv.lock | head -1) && \
+    echo "Pinning torch-spyre from ${BAD_REV} to ${TORCH_SPYRE_GOOD_REV}" && \
+    sed -i "s|${BAD_REV}|${TORCH_SPYRE_GOOD_REV}|g" uv.lock && \
+    uv sync --frozen 2>&1 | tee /home/senuser/spyre-inference-build.log && \
     echo "spyre-inference built and installed successfully"
 
 # Back to root for final permissions setup
