@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+images:
+  - name: REPLACE_MODEL_SERVER_IMAGE
+    newName: image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl-latest
+    newTag: v20
+    # newTag: v19  # Aug 26 2026 build (spyre-inference d507d02, vLLM 0.27.1, NIXL 8708e35e)
+    # newName: us.icr.io/wxpe-cicd-internal/amd64/spyre-inference-dev
+    # newTag: latest
+    # newName: image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl
+    # newTag: v11
+    # newName: us.icr.io/wxpe-cicd-internal/amd64/vllm-spyre-dev
+    # newTag: dev-next

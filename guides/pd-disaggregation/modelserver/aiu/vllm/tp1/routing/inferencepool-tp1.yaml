@@ -1,0 +1,22 @@
+# InferencePool for TP=1 PD-disaggregation deployment.
+# Reuses the existing pd-disaggregation-epp service (EPP is stateless).
+# Selects only the TP=1 pods via the llm-d.ai/tp=1 label.
+apiVersion: inference.networking.k8s.io/v1
+kind: InferencePool
+metadata:
+  name: pd-disagg-tp1
+  namespace: llm-d-on-aiu
+spec:
+  appProtocol: http
+  endpointPickerRef:
+    failureMode: FailOpen
+    group: ""
+    kind: Service
+    name: pd-disaggregation-epp
+    port:
+      number: 9002
+  selector:
+    matchLabels:
+      llm-d.ai/guide: pd-disaggregation-tp1
+  targetPorts:
+    - number: 8000

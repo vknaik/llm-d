@@ -1,0 +1,209 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prefill
+spec:
+  replicas: 1
+  template:
+    spec:
+      schedulerName: spyre-scheduler
+      nodeSelector:
+        ibm.com/spyre.product: IBM_Spyre
+        kubernetes.io/hostname: p1-worker-69
+      containers:
+        - name: modelserver
+          command:
+            - /bin/bash
+            - -lc
+          args:
+            - |
+              . /etc/bashrc-sentient-env.sh
+              setup_multi_aiu_env
+              source /home/senuser/spyre-inference/.venv/bin/activate
+              # Copy patched files from shared volume
+              cp /share/test2-prefill/workspace/files-modified/base_worker.py \
+                 /home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py
+              cp /share/test2-prefill/workspace/files-modified/utils.py \
+                 /home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/utils.py
+              vllm serve /model-cache/$MODEL_PATH \
+                --host 0.0.0.0 \
+                --served-model-name $MODEL_NAME \
+                --port $VLLM_INFERENCE_PORT \
+                --block-size $VLLM_BLOCK_SIZE \
+                --max-model-len $VLLM_MAX_MODEL_LEN \
+                --max-num-seqs $VLLM_MAX_NUM_SEQ \
+                --max-num-batched-tokens $VLLM_MAX_NUM_BATCHED_TOKENS \
+                --tensor-parallel-size $TP_SIZE \
+                --kv-transfer-config '{"kv_connector":"NixlConnector", "kv_role":"kv_both"}' \
+                --disable-uvicorn-access-log \
+                --disable-access-log-for-endpoints=/health,/metrics,/v1/models \
+                --enable-prefix-caching \
+                --dtype bfloat16 \
+                --no-disable-hybrid-kv-cache-manager
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: llm-d-hf-token
+                  key: HF_TOKEN
+            - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: VLLM_PLUGINS
+              value: spyre_inference
+            - name: AIU_SETUP_MULTI_AIU
+              value: "1"
+            - name: MODEL_PATH
+              value: models/ibm-granite/granite-3.3-8b-instruct
+            - name: MODEL_NAME
+              value: granite-8b
+            - name: VLLM_INFERENCE_PORT
+              value: "8000"
+            - name: VLLM_BLOCK_SIZE
+              value: "64"
+            - name: VLLM_MAX_MODEL_LEN
+              value: "16384"
+            - name: VLLM_MAX_NUM_SEQ
+              value: "16"
+            - name: VLLM_MAX_NUM_BATCHED_TOKENS
+              value: "512"
+            - name: TP_SIZE
+              value: "1"
+            - name: HOME
+              value: /tmp
+            - name: USER
+              value: vllm
+            - name: LOGNAME
+              value: vllm
+            - name: TORCHINDUCTOR_CACHE_DIR
+              value: /mnt/spyre-precompiled-model
+            - name: TRITON_CACHE_DIR
+              value: /.triton
+            - name: XDG_CACHE_HOME
+              value: /.cache
+            - name: XDG_CONFIG_HOME
+              value: /.config
+            # NOTE: vLLM 0.19.X and 0.20.X images ship both nixl-cu13 and nixl-cu12;
+            # NIXL can pick the wrong UCX libraries. Uncomment UCX_MODULE_DIR only
+            # if you are running a cu129 version of vLLM.
+            # - name: UCX_MODULE_DIR
+            #   value: /usr/local/lib/python3.12/dist-packages/nixl_cu12.libs/ucx
+            # Default vLLM keep-alive (5s) is shorter than llm-d-routing-sidecar's default idle
+            # conn timeout (90s, from Go http.Transport), causing TCP RSTs on reuse.
+            # Server keep-alive must be >= sidecar idle timeout; configured to 120s.
+            - name: VLLM_HTTP_TIMEOUT_KEEP_ALIVE
+              value: "120"
+            - name: FLEX_COMPUTE
+              value: SENTIENT
+            - name: FLEX_DEVICE
+              value: PF
+            - name: VLLM_SPYRE_PERF_METRIC_LOGGING_ENABLED
+              value: "1"
+            - name: FLEX_HDMA_P2PSIZE
+              value: "268435456"
+            - name: FLEX_HDMA_COLLSIZE
+              value: "268435456"
+            - name: HF_HUB_DISABLE_XET
+              value: "1"
+            - name: TORCH_SENDNN_CACHE_ENABLE
+              value: "1"
+            - name: TORCH_SENDNN_CACHE_DIR
+              value: /mnt/spyre-precompiled-model
+            - name: VLLM_SPYRE_DYNAMO_BACKEND
+              value: sendnn
+            - name: VLLM_SPYRE_USE_CB
+              value: "1"
+            - name: VLLM_SPYRE_USE_CHUNKED_PREFILL
+              value: "1"
+            - name: VLLM_DT_CHUNK_LEN
+              value: "1024"
+            - name: VLLM_SPYRE_ENABLE_NIXL_TRANSFER
+              value: "1"
+            - name: VLLM_SPYRE_NIXL_BLOCKING_TRANSFER
+              value: "0"
+            - name: VLLM_SPYRE_ENABLE_KV_CONNECTOR_BRIDGE
+              value: "1"
+            # Force UCX to prefer CMA/SHM transports over TCP for same-node transfers.
+            # CMA (process_vm_readv) is confirmed available between co-located pods
+            # (ptrace_scope=0, shared host PID namespace). This avoids the TCP
+            # prep_xfer_dlist deadlock caused by 655K-descriptor 15MB payloads.
+            - name: UCX_TLS
+              value: "cma,sysv,posix,tcp,self"
+            - name: UCX_ZCOPY_THRESH
+              value: "1"
+            - name: HF_HOME
+              value: /models/huggingface_cache
+          resources:
+            limits:
+              cpu: "20"
+              memory: 300Gi
+              ibm.com/spyre_pf: "1"
+            requests:
+              cpu: "20"
+              memory: 300Gi
+              ibm.com/spyre_pf: "1"
+          securityContext:
+            capabilities:
+              add:
+                - "IPC_LOCK"
+                - "SYS_RAWIO"
+                - "NET_ADMIN"
+                - "NET_RAW"
+            runAsGroup: 0
+            runAsUser: 0
+          imagePullPolicy: Always
+          volumeMounts:
+            - mountPath: /dev/shm
+              name: dshm
+            - mountPath: /.cache
+              name: torch-compile-cache
+            - mountPath: /.config
+              name: vllm-config
+            - mountPath: /.triton
+              name: triton-cache
+            - mountPath: /shared-config
+              name: shared-config
+            - mountPath: /model-cache
+              name: model-cache
+            - mountPath: /mnt/spyre-precompiled-model
+              name: spyre-precompiled-model
+            - mountPath: /share
+              name: share
+          startupProbe:
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 120
+          livenessProbe:
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Gi
+        - name: torch-compile-cache
+          emptyDir: {}
+        - name: vllm-config
+          emptyDir: {}
+        - name: triton-cache
+          emptyDir: {}
+        - name: shared-config
+          emptyDir: {}
+        - name: preprocess-home
+          emptyDir: {}
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: model-pvc
+        - name: spyre-precompiled-model
+          persistentVolumeClaim:
+            claimName: spyre-precompiled-model
+        - name: share
+          persistentVolumeClaim:
+            claimName: llm-d-vllm-spyre

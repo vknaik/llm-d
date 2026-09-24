@@ -1,0 +1,33 @@
+# HTTPRoute for TP=1 PD-disaggregation.
+# Routes /tp1/* to the pd-disagg-tp1 InferencePool.
+# The existing pd-disaggregation HTTPRoute (routing /) is unchanged.
+# Use path prefix /tp1/ for all TP=1 test requests:
+#   curl http://172.30.116.228:80/tp1/v1/completions ...
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: pd-disagg-tp1
+  namespace: llm-d-on-aiu
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: llm-d-inference-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /tp1
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      backendRefs:
+        - group: inference.networking.k8s.io
+          kind: InferencePool
+          name: pd-disagg-tp1
+          weight: 1
+      timeouts:
+        request: 0s

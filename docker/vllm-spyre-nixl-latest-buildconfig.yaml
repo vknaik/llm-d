@@ -1,0 +1,40 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: vllm-spyre-nixl-latest-bc
+  namespace: llm-d-on-aiu
+spec:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: vllm-spyre-nixl-latest:v18
+  source:
+    type: Binary
+    binary: {}
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile.vllm-spyre-nixl-latest
+      pullSecret:
+        name: llm-d-wxpe-cicd-image-pull
+      env:
+        - name: BUILD_LOGLEVEL
+          value: "5"
+  resources:
+    limits:
+      cpu: "8"
+      memory: 16Gi
+    requests:
+      cpu: "4"
+      memory: 8Gi
+  successfulBuildsHistoryLimit: 5
+  failedBuildsHistoryLimit: 5
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: vllm-spyre-nixl-latest
+  namespace: llm-d-on-aiu
+spec:
+  lookupPolicy:
+    local: true

@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decode
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: routing-proxy
+          $patch: delete
+      containers:
+        - name: routing-proxy
+          args:
+            - --port=8000
+            - --vllm-port=8001
+            - --kv-connector=nixlv2
+            - --zap-log-level=1
+            - --secure-proxy=false
+          image: ghcr.io/llm-d/llm-d-routing-sidecar:v0.8.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: routing-proxy
+              protocol: TCP
+          resources: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
