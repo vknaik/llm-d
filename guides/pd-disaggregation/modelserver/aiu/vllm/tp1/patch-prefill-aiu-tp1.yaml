@@ -22,6 +22,10 @@ spec:
             - |
               . /etc/bashrc-sentient-env.sh
               source /home/senuser/spyre-inference/.venv/bin/activate
+              # Patch torch_spyre compile timeout (default 60s too short for first-time kv_producer/consumer)
+              _ACOMP=/home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/torch_spyre/execution/async_compile.py
+              grep -q '_COMPILE_TIMEOUT_S = 60.0' "$_ACOMP" 2>/dev/null && \
+                sed -i 's/_COMPILE_TIMEOUT_S = 60.0/_COMPILE_TIMEOUT_S = 3600.0/' "$_ACOMP"
               # Copy patched files from shared volume
               cp /share/test2-prefill/workspace/files-modified/base_worker.py \
                  /home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py
