@@ -9,8 +9,8 @@ set -e
 
 ROLE=${1:-prefill}
 MODEL_PATH="/models/models/ibm-granite/granite-3.3-8b-instruct"
-PREFILL_IP="${PREFILL_IP:-10.131.2.43}"
-DECODE_IP="${DECODE_IP:-10.131.2.44}"
+PREFILL_IP="10.131.2.43"
+DECODE_IP="10.131.2.44"
 
 echo "=========================================="
 echo "vLLM NIXL Test - Role: $ROLE"
@@ -37,6 +37,14 @@ mkdir -p /home/senuser/workspace/logs
 
 cd /home/senuser/spyre-inference/
 source .venv/bin/activate
+
+# Patch torch_spyre compile timeout (default 60s too short for first-time PD graph hash compilation)
+ASYNC_COMPILE_FILE=/home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/torch_spyre/execution/async_compile.py
+if grep -q "_COMPILE_TIMEOUT_S = 60.0" "$ASYNC_COMPILE_FILE" 2>/dev/null; then
+  sed -i "s/_COMPILE_TIMEOUT_S = 60.0/_COMPILE_TIMEOUT_S = 3600.0/" "$ASYNC_COMPILE_FILE"
+  echo "Patched _COMPILE_TIMEOUT_S: 60s -> 3600s"
+fi
+
 
 # Manual kv transfer mode
 export VLLM_MANUAL_KV_TRANSFER=0
