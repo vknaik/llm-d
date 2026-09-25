@@ -4,6 +4,9 @@ metadata:
   name: decode
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
+    rollingUpdate: null
   template:
     spec:
       schedulerName: spyre-scheduler
@@ -55,7 +58,7 @@ spec:
                 --max-num-seqs $VLLM_MAX_NUM_SEQ \
                 --max-num-batched-tokens $VLLM_MAX_NUM_BATCHED_TOKENS \
                 --tensor-parallel-size $TP_SIZE \
-                --kv-transfer-config '{"kv_connector":"NixlConnector", "kv_role":"kv_both"}' \
+                --kv-transfer-config '{"kv_connector":"NixlConnector", "kv_role":"kv_consumer"}' \
                 --disable-uvicorn-access-log \
                 --disable-access-log-for-endpoints=/health,/metrics,/v1/models \
                 --enable-prefix-caching \
