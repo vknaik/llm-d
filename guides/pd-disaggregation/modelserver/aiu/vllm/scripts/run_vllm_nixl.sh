@@ -29,6 +29,8 @@ export TORCHINDUCTOR_CACHE_DIR=/share/torch_sendnn_cache
 export TORCH_SENDNN_CACHE_DIR=/share/torch_sendnn_cache
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=3600
 export TORCHINDUCTOR_COMPILE_TIMEOUT=3600
+export UCX_TLS=cma,sysv,posix,tcp,self
+export UCX_ZCOPY_THRESH=1
 export VLLM_SPYRE_DYNAMO_BACKEND=sendnn
 export TORCH_DEVICE_BACKEND_AUTOLOAD=0
 
