@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: base-image-reference
+  namespace: llm-d-on-aiu
+  labels:
+    app: base-image-reference
+spec:
+  serviceAccountName: pd-disaggregation-ibm-aiu-vllm-sa
+  schedulerName: spyre-scheduler
+  containers:
+  - name: spyre-inference
+    image: us.icr.io/wxpe-cicd-internal/amd64/spyre-inference-dev:latest
+    command: ["sleep", "infinity"]
+    resources:
+      requests:
+        ibm.com/spyre_pf: "1"
+      limits:
+        ibm.com/spyre_pf: "1"
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 2Gi
+  restartPolicy: Never

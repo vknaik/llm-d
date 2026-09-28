@@ -1,0 +1,42 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: vllm-spyre-nixl-bc
+  namespace: llm-d-on-aiu
+  labels:
+    app: vllm-spyre-nixl
+    component: build
+spec:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: vllm-spyre-nixl-with-spyre-inference:v16
+    pushSecret:
+      name: llm-d-wxpe-cicd-image-pull
+  source:
+    type: Binary
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+      pullSecret:
+        name: llm-d-wxpe-cicd-image-pull
+      buildArgs:
+        - name: BASE_IMAGE
+          value: us.icr.io/wxpe-cicd-internal/amd64/spyre-inference-dev:latest
+        - name: SPYRE_INFERENCE_COMMIT
+          value: 5c446cb
+  triggers: []
+  runPolicy: Serial
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: vllm-spyre-nixl-with-spyre-inference
+  namespace: llm-d-on-aiu
+  labels:
+    app: vllm-spyre-nixl
+    component: image
+spec:
+  lookupPolicy:
+    local: true

@@ -1,0 +1,12 @@
+export GATEWAY_API_VERSION=v1.5.1
+export GAIE_VERSION=v1.5.0
+export ROUTER_CHART_VERSION=v0
+export LLM_D_VERSION=main # use 'main' for the latest
+export GUIDE_NAME="pd-disaggregation"
+export NAMESPACE="multi-model-pd"
+# export MODEL_NAME="openai/gpt-oss-120b"
+export MODEL_NAME="Qwen/Qwen3-32B"
+export REPO_ROOT=$(realpath $(git rev-parse --show-toplevel))
+export HF_TOKEN=<YOUR_HUGGINGFACE_TOKEN>
+export INFRA_PROVIDER=base # base | coreweave | gke
+export PROVIDER_NAME=istio # options: none, gke, agentgateway, istio

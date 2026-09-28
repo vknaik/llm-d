@@ -1,0 +1,126 @@
+# Dockerfile for vLLM with Spyre NIXL support and pre-installed spyre-inference
+# This extends the base vllm-spyre-nixl image to include a pre-built spyre-inference installation
+
+ARG BASE_IMAGE=us.icr.io/wxpe-cicd-internal/amd64/spyre-inference-dev:latest
+
+FROM ${BASE_IMAGE}
+
+USER root
+
+# Configuration
+ENV UCX_VERSION="1.19.0" \
+    UCX_INSTALL_PREFIX="/opt/ucx" \
+    NIXL_VERSION="ba7e40760027796890ad17e95620526c3c5560ee" \
+    NIXL_INSTALL_PREFIX="/opt/nixl" \
+    SPYRE_INFERENCE_COMMIT="5c446cb"
+
+# Install system dependencies for UCX
+RUN dnf install -y \
+    rdma-core-devel \
+    libibverbs-devel \
+    librdmacm-devel \
+    numactl-libs \
+    && dnf clean all
+
+# Build and install UCX 1.19.0
+WORKDIR /tmp
+RUN wget https://github.com/openucx/ucx/releases/download/v${UCX_VERSION}/ucx-${UCX_VERSION}.tar.gz && \
+    tar -xzf ucx-${UCX_VERSION}.tar.gz && \
+    cd ucx-${UCX_VERSION} && \
+    ./configure \
+        --prefix=${UCX_INSTALL_PREFIX} \
+        --enable-shared \
+        --disable-static \
+        --disable-doxygen-doc \
+        --enable-optimizations \
+        --enable-cma \
+        --enable-devel-headers \
+        --with-verbs \
+        --with-dm \
+        --enable-mt && \
+    make -j$(nproc) && \
+    make install && \
+    echo "${UCX_INSTALL_PREFIX}/lib" > /etc/ld.so.conf.d/ucx.conf && \
+    ldconfig && \
+    cd /tmp && \
+    rm -rf ucx-${UCX_VERSION} ucx-${UCX_VERSION}.tar.gz && \
+    (ldconfig -p | grep libucx || true) && \
+    ${UCX_INSTALL_PREFIX}/bin/ucx_info -v && \
+    echo "UCX 1.19.0 installed successfully"
+
+# Install Python build tools and dependencies for NIXL
+RUN dnf install -y \
+    gcc \
+    gcc-c++ \
+    meson \
+    ninja-build \
+    python3-pip \
+    python3-devel && \
+    dnf clean all && \
+    pip3 install --no-cache-dir pybind11 meson ninja meson-python build wheel pytest patchelf types-PyYAML
+
+# Build and install NIXL
+RUN cd /tmp && \
+    git clone https://github.com/ai-dynamo/nixl.git && \
+    cd nixl && \
+    git checkout ${NIXL_VERSION} && \
+    export PKG_CONFIG_PATH="${UCX_INSTALL_PREFIX}/lib/pkgconfig:/usr/lib64/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH}" && \
+    export LD_LIBRARY_PATH="${UCX_INSTALL_PREFIX}/lib:${LD_LIBRARY_PATH}" && \
+    python3 -m mesonbuild.mesonmain setup build --prefix=${NIXL_INSTALL_PREFIX} -Ducx_path=${UCX_INSTALL_PREFIX} && \
+    cd build && \
+    ninja && \
+    ninja install && \
+    cd /tmp/nixl && \
+    python3 -m build --no-isolation --wheel && \
+    pip3 install --no-cache-dir dist/*.whl && \
+    echo "${NIXL_INSTALL_PREFIX}/lib" > /etc/ld.so.conf.d/nixl.conf && \
+    ldconfig && \
+    cd /tmp && \
+    rm -rf nixl && \
+    python3 -c "import nixl; print('NIXL Python bindings installed successfully')" && \
+    echo "NIXL installed successfully"
+
+# Switch to senuser for spyre-inference installation
+USER 1234:0
+WORKDIR /home/senuser
+
+# Clone and build spyre-inference at specific commit (July 20, 2026 - last known working version)
+# Override torch-spyre to commit e3438fd (March 16, 2026 - before sen_host_ops.h requirement)
+RUN git clone https://github.com/torch-spyre/spyre-inference.git && \
+    cd spyre-inference && \
+    git checkout ${SPYRE_INFERENCE_COMMIT} && \
+    sed -i 's|torch-spyre = { git = "https://github.com/torch-spyre/torch-spyre", rev = "d88fa98f413842a5383fe73f062f64fe9d943b7e" }|torch-spyre = { git = "https://github.com/torch-spyre/torch-spyre", rev = "e3438fd" }|' pyproject.toml && \
+    export SPYRE_COMMS_INSTALL_DIR=/opt/ibm/spyre/spyre-comms && \
+    export PATH="${UCX_INSTALL_PREFIX}/bin:${NIXL_INSTALL_PREFIX}/bin:$PATH" && \
+    export LD_LIBRARY_PATH="${UCX_INSTALL_PREFIX}/lib:${NIXL_INSTALL_PREFIX}/lib64:$LD_LIBRARY_PATH" && \
+    export PKG_CONFIG_PATH="${UCX_INSTALL_PREFIX}/lib/pkgconfig:$PKG_CONFIG_PATH" && \
+    export PYTHONPATH="${NIXL_INSTALL_PREFIX}/lib64/python3.12/site-packages:$PYTHONPATH" && \
+    uv sync 2>&1 | tee /home/senuser/spyre-inference-build.log && \
+    echo "spyre-inference built and installed successfully"
+
+# Back to root for final permissions setup
+USER root
+
+# Set ownership and permissions
+# Remove /tmp/etc to prevent chmod errors at runtime (base image creates these as root)
+RUN rm -rf /tmp/etc && \
+    chown -R 1234:0 ${UCX_INSTALL_PREFIX} && \
+    chmod -R g+rwx ${UCX_INSTALL_PREFIX} && \
+    chown -R 1234:0 /home/senuser/.cache && \
+    chmod -R g+rwx /home/senuser/.cache && \
+    chown -R 1234:0 /home/senuser/spyre-inference && \
+    chmod -R g+rwx /home/senuser/spyre-inference
+
+USER 1234:0
+WORKDIR /home/senuser
+
+# Set environment variables to make UCX, NIXL, and spyre-inference available
+ENV PATH="${UCX_INSTALL_PREFIX}/bin:${NIXL_INSTALL_PREFIX}/bin:/home/senuser/spyre-inference/.venv/bin:$PATH" \
+    LD_LIBRARY_PATH="${UCX_INSTALL_PREFIX}/lib:${NIXL_INSTALL_PREFIX}/lib64:$LD_LIBRARY_PATH" \
+    PKG_CONFIG_PATH="${UCX_INSTALL_PREFIX}/lib/pkgconfig:$PKG_CONFIG_PATH" \
+    PYTHONPATH="${NIXL_INSTALL_PREFIX}/lib64/python3.12/site-packages:$PYTHONPATH" \
+    VLLM_PLUGINS=spyre_inference \
+    VIRTUAL_ENV="/home/senuser/spyre-inference/.venv" \
+    SPYRE_COMMS_INSTALL_DIR="/opt/ibm/spyre/spyre-comms"
+
+CMD ["bash", "-l", "/home/senuser/.local/bin/dev_entrypoint.sh"]

@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-vllm-spyre-nixl
+  namespace: llm-d-on-aiu
+  labels:
+    app: test-vllm-spyre-nixl
+spec:
+  restartPolicy: Never
+  containers:
+  - name: vllm-spyre-nixl
+    image: image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl@sha256:325898ed02616c283cf91f7a91b33fda3fa39a5f2658b253ec52d74f0724bf31
+    command: ["/bin/bash", "-c"]
+    args:
+    - |
+      set -e
+      echo "=== Testing vllm-spyre-nixl image ==="
+      echo ""
+      echo "1. Checking UCX installation..."
+      ls -la /opt/ucx/lib/ | head -20
+      echo ""
+      echo "2. Verifying UCX libraries are loadable..."
+      ldconfig -p | grep -i ucx || echo "UCX not in system ldconfig cache (expected)"
+      echo ""
+      echo "3. Testing UCX binaries..."
+      /opt/ucx/bin/ucx_info -v
+      echo ""
+      echo "4. Checking LD_LIBRARY_PATH..."
+      echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+      echo ""
+      echo "5. Testing library loading with ldd..."
+      ldd /opt/ucx/bin/ucx_info | grep -i ucx
+      echo ""
+      echo "6. Checking spyre-inference venv..."
+      ls -la /home/senuser/spyre-inference/.venv/bin/ | head -10
+      echo ""
+      echo "7. Checking vLLM installation..."
+      source /home/senuser/spyre-inference/.venv/bin/activate
+      python -c "import vllm; print(f'vLLM version: {vllm.__version__}')"
+      echo ""
+      echo "8. Checking vLLM NixlConnector..."
+      python -c "from vllm.distributed.kv_transfer.kv_connector.v1.nixl import NixlConnector; print('NixlConnector imported successfully')"
+      echo ""
+      echo "9. Checking spyre_inference plugin..."
+      python -c "import spyre_inference; print('spyre_inference plugin imported successfully')"
+      echo ""
+      echo "=== All checks passed! ==="
+      sleep 3600
+    resources:
+      requests:
+        cpu: "2"
+        memory: "8Gi"
+        ibm.com/spyre_pf: "1"
+      limits:
+        cpu: "4"
+        ibm.com/spyre_pf: "1"
+    securityContext:
+      runAsUser: 1234
+      runAsGroup: 0
+      capabilities:
+        add:
+        - IPC_LOCK
+    volumeMounts:
+    - name: shm
+      mountPath: /dev/shm
+  volumes:
+  - name: shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 4Gi

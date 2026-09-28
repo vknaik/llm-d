@@ -1,0 +1,42 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: vllm-spyre-nixl-bc
+  namespace: llm-d-on-aiu
+  labels:
+    app: vllm-spyre-nixl
+    component: build
+spec:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: vllm-spyre-nixl-with-spyre-inference:v16
+  source:
+    type: Git
+    git:
+      uri: https://github.com/llm-d/llm-d
+      ref: main
+    contextDir: docker
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+      buildArgs:
+        - name: BASE_IMAGE
+          value: us.icr.io/wxpe-cicd-internal/amd64/spyre-inference-dev:latest
+        - name: SPYRE_INFERENCE_COMMIT
+          value: 5c446cb
+  triggers: []
+  runPolicy: Serial
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: vllm-spyre-nixl-with-spyre-inference
+  namespace: llm-d-on-aiu
+  labels:
+    app: vllm-spyre-nixl
+    component: image
+spec:
+  lookupPolicy:
+    local: true

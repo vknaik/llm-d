@@ -1,0 +1,103 @@
+# Dockerfile for vLLM with Spyre NIXL support
+# Base image already includes vLLM with built-in NixlConnector and NIXL library
+# This Dockerfile only ensures UCX 1.19.0 is available for NIXL to use
+
+ARG BASE_IMAGE=us.icr.io/wxpe-cicd-internal/amd64/spyre-inference-dev:latest
+
+FROM ${BASE_IMAGE}
+
+USER root
+
+# Configuration
+ENV UCX_VERSION="1.19.0" \
+    UCX_INSTALL_PREFIX="/opt/ucx"
+
+# Install system dependencies for UCX
+RUN dnf install -y \
+    rdma-core-devel \
+    libibverbs-devel \
+    librdmacm-devel \
+    numactl-libs \
+    && dnf clean all
+
+# Build and install UCX 1.19.0
+WORKDIR /tmp
+RUN wget https://github.com/openucx/ucx/releases/download/v${UCX_VERSION}/ucx-${UCX_VERSION}.tar.gz && \
+    tar -xzf ucx-${UCX_VERSION}.tar.gz && \
+    cd ucx-${UCX_VERSION} && \
+    ./configure \
+        --prefix=${UCX_INSTALL_PREFIX} \
+        --enable-shared \
+        --disable-static \
+        --disable-doxygen-doc \
+        --enable-optimizations \
+        --enable-cma \
+        --enable-devel-headers \
+        --with-verbs \
+        --with-dm \
+        --enable-mt && \
+    make -j$(nproc) && \
+    make install && \
+    echo "${UCX_INSTALL_PREFIX}/lib" > /etc/ld.so.conf.d/ucx.conf && \
+    ldconfig && \
+    cd /tmp && \
+    rm -rf ucx-${UCX_VERSION} ucx-${UCX_VERSION}.tar.gz && \
+    (ldconfig -p | grep libucx || true) && \
+    ${UCX_INSTALL_PREFIX}/bin/ucx_info -v && \
+    echo "UCX 1.19.0 installed successfully"
+
+# Install Python build tools and dependencies for NIXL
+RUN dnf install -y \
+    gcc \
+    gcc-c++ \
+    meson \
+    ninja-build \
+    python3-pip \
+    python3-devel && \
+    dnf clean all && \
+    pip3 install --no-cache-dir pybind11 meson ninja meson-python build wheel pytest patchelf types-PyYAML
+
+# Build and install NIXL
+ENV NIXL_VERSION="ba7e40760027796890ad17e95620526c3c5560ee" \
+    NIXL_INSTALL_PREFIX="/opt/nixl"
+
+RUN cd /tmp && \
+    git clone https://github.com/ai-dynamo/nixl.git && \
+    cd nixl && \
+    git checkout ${NIXL_VERSION} && \
+    export PKG_CONFIG_PATH="${UCX_INSTALL_PREFIX}/lib/pkgconfig:/usr/lib64/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH}" && \
+    export LD_LIBRARY_PATH="${UCX_INSTALL_PREFIX}/lib:${LD_LIBRARY_PATH}" && \
+    python3 -m mesonbuild.mesonmain setup build --prefix=${NIXL_INSTALL_PREFIX} -Ducx_path=${UCX_INSTALL_PREFIX} && \
+    cd build && \
+    ninja && \
+    ninja install && \
+    cd /tmp/nixl && \
+    python3 -m build --no-isolation --wheel && \
+    pip3 install --no-cache-dir dist/*.whl && \
+    echo "${NIXL_INSTALL_PREFIX}/lib" > /etc/ld.so.conf.d/nixl.conf && \
+    ldconfig && \
+    cd /tmp && \
+    rm -rf nixl && \
+    python3 -c "import nixl; print('NIXL Python bindings installed successfully')" && \
+    echo "NIXL installed successfully"
+
+# Set ownership and permissions
+# Remove /tmp/etc to prevent chmod errors at runtime (base image creates these as root)
+RUN rm -rf /tmp/etc && \
+    chown -R 1234:0 ${UCX_INSTALL_PREFIX} && \
+    chmod -R g+rwx ${UCX_INSTALL_PREFIX} && \
+    chown -R 1234:0 /home/senuser/.cache && \
+    chmod -R g+rwx /home/senuser/.cache
+
+USER 1234:0
+WORKDIR /home/senuser
+
+# Set environment variables to make UCX and NIXL available
+ENV PATH="${UCX_INSTALL_PREFIX}/bin:${NIXL_INSTALL_PREFIX}/bin:/home/senuser/spyre-inference/.venv/bin:$PATH" \
+    LD_LIBRARY_PATH="${UCX_INSTALL_PREFIX}/lib:${NIXL_INSTALL_PREFIX}/lib64:$LD_LIBRARY_PATH" \
+    PKG_CONFIG_PATH="${UCX_INSTALL_PREFIX}/lib/pkgconfig:$PKG_CONFIG_PATH" \
+    PYTHONPATH="${NIXL_INSTALL_PREFIX}/lib64/python3.12/site-packages:$PYTHONPATH" \
+    VLLM_PLUGINS=spyre_inference \
+    VIRTUAL_ENV="/home/senuser/spyre-inference/.venv"
+
+CMD ["bash", "-l", "/home/senuser/.local/bin/dev_entrypoint.sh"]
