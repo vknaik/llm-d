@@ -14,10 +14,15 @@ export NAMESPACE=llm-d-on-aiu
 export GUIDE_NAME=pd-disaggregation
 export INFRA_PROVIDER=openshift
 
+# Set your Hugging Face User Access Token (required for downloading gated models/tokenizers)
+export HF_TOKEN="<YOUR_HUGGINGFACE_TOKEN>"
+
 # Target registry for Spyre vLLM container images
 export REGISTRY=image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu
 export IMAGE_TAG=v20
 ```
+
+> **Note on `HF_TOKEN`:** Ensure you set your Hugging Face access token before sourcing setup scripts, or update the `HF_TOKEN` variable in `setup/my-env-aiu-spyre.sh` (or `setup/my-env-gpu-pokprod001.sh`). Never commit secret tokens to version control.
 
 Source the environment configuration:
 ```bash

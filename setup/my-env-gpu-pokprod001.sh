@@ -7,6 +7,6 @@ export NAMESPACE="multi-model-pd"
 # export MODEL_NAME="openai/gpt-oss-120b"
 export MODEL_NAME="Qwen/Qwen3-32B"
 export REPO_ROOT=$(realpath $(git rev-parse --show-toplevel))
-export HF_TOKEN=<YOUR_HUGGINGFACE_TOKEN>
+export HF_TOKEN="${HF_TOKEN:-<YOUR_HUGGINGFACE_TOKEN>}"
 export INFRA_PROVIDER=base # base | coreweave | gke
 export PROVIDER_NAME=istio # options: none, gke, agentgateway, istio
