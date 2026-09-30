@@ -17,3 +17,10 @@ CLAUDE.md
 
 # AI
 .claude
+
+# Local credentials / environment overrides
+setup/my-env-local.sh
+setup/*-local.sh
+*.local.sh
+.env
+.env.*
