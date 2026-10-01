@@ -142,8 +142,6 @@ spec:
               value: "0"
             - name: VLLM_SPYRE_ENABLE_KV_CONNECTOR_BRIDGE
               value: "1"
-            - name: VLLM_SPYRE_NIXL_REMOTE_IP
-              value: "10.131.3.211"
             # Force UCX to prefer CMA/SHM transports over TCP for same-node transfers.
             # CMA (process_vm_readv) is confirmed available between co-located pods
             # (ptrace_scope=0, shared host PID namespace). This avoids the TCP

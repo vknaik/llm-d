@@ -8,9 +8,9 @@
 set -e
 
 ROLE=${1:-prefill}
-MODEL_PATH="/models/models/ibm-granite/granite-3.3-8b-instruct"
-PREFILL_IP="10.131.2.43"
-DECODE_IP="10.131.2.44"
+MODEL_PATH="${MODEL_PATH:-/models/models/ibm-granite/granite-3.3-8b-instruct}"
+PREFILL_IP="${PREFILL_IP:-127.0.0.1}"
+DECODE_IP="${DECODE_IP:-127.0.0.1}"
 
 echo "=========================================="
 echo "vLLM NIXL Test - Role: $ROLE"

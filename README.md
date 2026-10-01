@@ -9,8 +9,8 @@ This guide details the complete workflow for deploying `llm-d` with **Prefill-De
 Configure your local OpenShift environment variables:
 
 ```bash
-export KUBECONFIG=/home/vkn/.kube/config-llm-d.spyre
-export NAMESPACE=llm-d-on-aiu
+export KUBECONFIG="${KUBECONFIG:-~/.kube/config}"
+export NAMESPACE="${NAMESPACE:-llm-d-on-aiu}"
 export GUIDE_NAME=pd-disaggregation
 export INFRA_PROVIDER=openshift
 
@@ -18,8 +18,8 @@ export INFRA_PROVIDER=openshift
 export HF_TOKEN="<YOUR_HUGGINGFACE_TOKEN>"
 
 # Target registry for Spyre vLLM container images
-export REGISTRY=image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu
-export IMAGE_TAG=v20
+export REGISTRY="${REGISTRY:-image-registry.openshift-image-registry.svc:5000/${NAMESPACE}}"
+export IMAGE_TAG="${IMAGE_TAG:-v20}"
 ```
 
 > **Note on `HF_TOKEN`:** Ensure you set your Hugging Face access token before sourcing setup scripts, or update the `HF_TOKEN` variable in `setup/my-env-aiu-spyre.sh` (or `setup/my-env-gpu-pokprod001.sh`). Never commit secret tokens to version control.
@@ -66,13 +66,13 @@ oc apply -k "https://github.com/llm-d/llm-d/guides/recipes/gateway/istio?ref=${L
 ```
 
 ### 3.2 Deploy Modelserver (TP=2 PD Disaggregation)
-Deploy the prefill and decode deployments with the sidecar router on node `p1-worker-69`:
+Deploy the prefill and decode deployments with the sidecar router:
 ```bash
 oc apply -n ${NAMESPACE} -k guides/pd-disaggregation/modelserver/aiu/vllm/base
 ```
 
 ### 3.3 Deploy Modelserver (TP=1 PD Disaggregation)
-Deploy the TP=1 prefill and decode deployments on node `p1-worker-63`:
+Deploy the TP=1 prefill and decode deployments:
 ```bash
 oc apply -n ${NAMESPACE} -k guides/pd-disaggregation/modelserver/aiu/vllm/tp1
 ```
@@ -108,14 +108,22 @@ oc exec -n aiu-vllm test1-prefill-spyre-dev -- \
 
 ### 5.2 TP=1 PD Disaggregation via Gateway (Exp C)
 ```bash
-oc exec -n llm-d-on-aiu pd-disagg-tp1-ibm-aiu-vllm-prefill-544c56f85f-54tjh -c modelserver -- \
-  python3 /tmp/stream_timing.py http://172.30.116.228:80/tp1/v1/completions 5 50
+# Get Gateway Service IP
+GATEWAY_IP=$(oc get svc -n ${NAMESPACE} -l app.kubernetes.io/name=gateway -o jsonpath='{.items[0].spec.clusterIP}')
+PREFILL_POD=$(oc get pods -n ${NAMESPACE} -l llm-d.ai/role=prefill -o jsonpath='{.items[0].metadata.name}')
+
+oc exec -n ${NAMESPACE} ${PREFILL_POD} -c modelserver -- \
+  python3 /tmp/stream_timing.py http://${GATEWAY_IP}:80/tp1/v1/completions 5 50
 ```
 
 ### 5.3 TP=2 PD Disaggregation via Gateway (Exp D)
 ```bash
-oc exec -n llm-d-on-aiu pd-disaggregation-ibm-aiu-vllm-prefill-dbb5ff4df-btb5z -c modelserver -- \
-  python3 /tmp/stream_timing.py http://172.30.116.228:80/v1/completions 5 50
+# Get Gateway Service IP
+GATEWAY_IP=$(oc get svc -n ${NAMESPACE} -l app.kubernetes.io/name=gateway -o jsonpath='{.items[0].spec.clusterIP}')
+PREFILL_POD=$(oc get pods -n ${NAMESPACE} -l llm-d.ai/role=prefill -o jsonpath='{.items[0].metadata.name}')
+
+oc exec -n ${NAMESPACE} ${PREFILL_POD} -c modelserver -- \
+  python3 /tmp/stream_timing.py http://${GATEWAY_IP}:80/v1/completions 5 50
 ```
 
 ---

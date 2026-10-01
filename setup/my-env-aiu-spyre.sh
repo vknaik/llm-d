@@ -9,11 +9,11 @@
 #   INFRA_PROVIDER  - kustomize overlay provider: base | coreweave | gke
 #   PROVIDER_NAME   - Gateway provider: none | gke | agentgateway | istio
 #
-# Node-level customisation (hardwired in kustomize patch files):
+# Node-level customisation (in kustomize patch files):
 #   guides/pd-disaggregation/modelserver/aiu/vllm/base/patch-decode-aiu-v1.yaml
-#     -> spec.template.spec.nodeSelector.kubernetes.io/hostname: p1-worker-69
+#     -> spec.template.spec.nodeSelector.kubernetes.io/hostname: <TARGET_NODE_NAME>
 #   guides/pd-disaggregation/modelserver/aiu/vllm/tp1/patch-decode-aiu-tp1.yaml
-#     -> spec.template.spec.nodeSelector.kubernetes.io/hostname: p1-worker-63
+#     -> spec.template.spec.nodeSelector.kubernetes.io/hostname: <TARGET_NODE_NAME>
 #   Adjust those files for your target worker nodes.
 #
 # Registry customisation:

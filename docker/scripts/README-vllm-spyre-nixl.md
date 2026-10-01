@@ -29,7 +29,7 @@ The base `spyre-inference-dev:latest` image is a development image that changes 
 ### Build Steps (OpenShift BuildConfig)
 
 ```bash
-cd /home/vkn/llm-d/llm-d/docker/scripts
+cd docker/scripts
 
 # Build using OpenShift BuildConfig
 ./build-vllm-spyre-nixl-openshift.sh
@@ -46,7 +46,7 @@ The script will:
 If you prefer to build locally:
 
 ```bash
-cd /home/vkn/llm-d/llm-d/docker/scripts
+cd docker/scripts
 
 # Build and optionally push to registry
 ./build-vllm-spyre-nixl.sh
@@ -88,7 +88,7 @@ After building and pushing the image, update the kustomization file:
 
 ```bash
 # Edit the image reference
-vim /home/vkn/llm-d/llm-d/guides/recipes/modelserver/components/images/aiu-vllm/kustomization.yaml
+vim guides/recipes/modelserver/components/images/aiu-vllm/kustomization.yaml
 ```
 
 Change:
@@ -179,7 +179,7 @@ oc describe imagestream vllm-spyre-nixl -n llm-d-on-aiu
 oc start-build vllm-spyre-nixl -n llm-d-on-aiu --follow
 
 # Or use the script
-cd /home/vkn/llm-d/llm-d/docker/scripts
+cd docker/scripts
 ./build-vllm-spyre-nixl-openshift.sh
 ```
 

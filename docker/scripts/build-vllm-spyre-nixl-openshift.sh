@@ -7,7 +7,7 @@ set -e
 NAMESPACE="${NAMESPACE:-llm-d-on-aiu}"
 IMAGE_NAME="vllm-spyre-nixl"
 IMAGE_TAG="${IMAGE_TAG:-v13}"
-KUBECONFIG="${KUBECONFIG:-/home/vkn/.kube/config-llm-d.spyre}"
+KUBECONFIG="${KUBECONFIG:-~/.kube/config}"
 
 export KUBECONFIG
 

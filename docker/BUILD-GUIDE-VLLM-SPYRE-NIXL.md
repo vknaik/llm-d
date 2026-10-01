@@ -38,7 +38,7 @@ This build uses OpenShift's **Binary BuildConfig** which uploads local files dir
 1. Access to OpenShift cluster with llm-d-on-aiu namespace
 2. `oc` CLI installed and logged in
 3. Access to base image: `us.icr.io/wxpe-cicd-internal/amd64/spyre-inference-dev:latest`
-4. Local files in `/home/vkn/llm-d/llm-d/docker/`:
+4. Local files in `docker/`:
    - `Dockerfile` (symlink to `Dockerfile.vllm-spyre-nixl-with-spyre-inference`)
    - `Dockerfile.vllm-spyre-nixl-with-spyre-inference`
    - All other files in docker directory
@@ -48,7 +48,7 @@ This build uses OpenShift's **Binary BuildConfig** which uploads local files dir
 Create the Binary BuildConfig and ImageStream:
 
 ```bash
-cd /home/vkn/llm-d/llm-d/docker
+cd docker
 oc apply -f vllm-spyre-nixl-buildconfig-binary.yaml -n llm-d-on-aiu
 ```
 
@@ -61,7 +61,7 @@ This creates:
 ### Build Command
 
 ```bash
-cd /home/vkn/llm-d/llm-d/docker
+cd docker
 
 # Build with default settings (v16, commit 5c446cb)
 ./build-vllm-spyre-nixl-with-spyre-inference.sh
@@ -106,7 +106,7 @@ The OpenShift build will:
 If you prefer to trigger the build manually:
 
 ```bash
-cd /home/vkn/llm-d/llm-d/docker
+cd docker
 
 # Update BuildConfig build args
 oc patch bc vllm-spyre-nixl-bc -n llm-d-on-aiu --type=json -p='[
@@ -263,7 +263,7 @@ If UCX or NIXL installation fails:
 ### Build Fails: File Upload
 
 If binary build fails to upload files:
-- Verify you're in the correct directory: `/home/vkn/llm-d/llm-d/docker`
+- Verify you're in the correct directory: `docker/`
 - Check that Dockerfile symlink exists and is correct
 - Ensure you have network connectivity to OpenShift cluster
 
@@ -326,7 +326,7 @@ To use the latest spyre-inference commit (after July 22):
 ## OpenShift Build Architecture (Binary Build)
 
 ```
-Local Files (/home/vkn/llm-d/llm-d/docker/)
+Local Files (`docker/`)
     ↓ (oc start-build --from-dir=.)
 BuildConfig (vllm-spyre-nixl-bc, type: Binary)
     ↓
