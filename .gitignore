@@ -21,6 +21,7 @@ CLAUDE.md
 # Local credentials / environment overrides
 setup/my-env-local.sh
 setup/*-local.sh
+setup/vkn-env-*.sh
 *.local.sh
 .env
 .env.*
