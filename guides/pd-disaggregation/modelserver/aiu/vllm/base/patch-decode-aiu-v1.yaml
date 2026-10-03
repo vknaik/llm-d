@@ -48,9 +48,20 @@ spec:
               _ACOMP=/home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/torch_spyre/execution/async_compile.py
               grep -q '_COMPILE_TIMEOUT_S = 60.0' "$_ACOMP" 2>/dev/null && \
                 sed -i 's/_COMPILE_TIMEOUT_S = 60.0/_COMPILE_TIMEOUT_S = 3600.0/' "$_ACOMP"
-              # Copy patched files from shared volume
-              cp /share/test2-prefill/workspace/files-modified/base_worker.py \
-                 /home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py
+              # Install Spyre NIXL connector subclass into spyre_inference package.
+              # This replaces the old approach of overwriting vLLM's base_worker.py.
+              SPYRE_NIXL_DIR=/home/senuser/spyre-inference/spyre_inference/distributed/kv_transfer/kv_connector/v1/nixl
+              mkdir -p ${SPYRE_NIXL_DIR}
+              for d in \
+                /home/senuser/spyre-inference/spyre_inference/distributed/kv_transfer \
+                /home/senuser/spyre-inference/spyre_inference/distributed/kv_transfer/kv_connector \
+                /home/senuser/spyre-inference/spyre_inference/distributed/kv_transfer/kv_connector/v1 \
+                ${SPYRE_NIXL_DIR}; do
+                touch ${d}/__init__.py
+              done
+              cp /share/test2-prefill/workspace/files-modified/spyre_connector.py ${SPYRE_NIXL_DIR}/spyre_connector.py
+              cp /share/test2-prefill/workspace/files-modified/spyre_inference_init.py \
+                 /home/senuser/spyre-inference/spyre_inference/__init__.py
               cp /share/test2-prefill/workspace/files-modified/utils.py \
                  /home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/utils.py
               vllm serve /model-cache/$MODEL_PATH \
@@ -62,7 +73,7 @@ spec:
                 --max-num-seqs $VLLM_MAX_NUM_SEQ \
                 --max-num-batched-tokens $VLLM_MAX_NUM_BATCHED_TOKENS \
                 --tensor-parallel-size $TP_SIZE \
-                --kv-transfer-config '{"kv_connector":"NixlConnector", "kv_role":"kv_consumer"}' \
+                --kv-transfer-config '{"kv_connector":"SpyreNixlConnector", "kv_role":"kv_consumer"}' \
                 --disable-uvicorn-access-log \
                 --disable-access-log-for-endpoints=/health,/metrics,/v1/models \
                 --enable-prefix-caching \
