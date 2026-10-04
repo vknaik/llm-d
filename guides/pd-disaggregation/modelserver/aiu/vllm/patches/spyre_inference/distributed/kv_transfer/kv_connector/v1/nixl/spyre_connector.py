@@ -17,18 +17,24 @@ Instead of replacing the entire upstream
 ``vllm/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py``, which
 breaks every time vLLM changes an internal signature, this module defines:
 
-``SpyreNixlConnectorWorker``
-    A thin subclass of :class:`NixlBaseConnectorWorker` that overrides only
-    ``register_kv_caches()`` to handle Spyre's CPU-staging
-    ``SpyrePagedKVCache`` layout.  All NIXL handshake, pull/push worker,
-    prefix-caching, and scheduling logic is inherited directly from upstream.
+``_SpyreRegisterKVCachesMixin``
+    A mixin that overrides only ``register_kv_caches()`` to handle Spyre's
+    CPU-staging ``SpyrePagedKVCache`` layout.
+
+``SpyreNixlPullConnectorWorker``
+    Subclass of :class:`NixlPullConnectorWorker` + mixin.  Passes all
+    upstream ``isinstance(worker, NixlPullConnectorWorker)`` checks.
+
+``SpyreNixlPushConnectorWorker``
+    Subclass of :class:`NixlPushConnectorWorker` + mixin.  Passes all
+    upstream ``isinstance(worker, NixlPushConnectorWorker)`` checks.
 
 ``SpyreNixlConnector``
-    Subclass of :class:`NixlPullConnector` (kv_producer / kv_consumer) that
-    swaps in ``SpyreNixlConnectorWorker`` as the worker-side implementation.
+    Subclass of :class:`NixlPullConnector` that instantiates
+    ``SpyreNixlPullConnectorWorker`` instead of ``NixlPullConnectorWorker``.
 
 ``SpyreNixlPushConnector``
-    Subclass of :class:`NixlPushConnector` that does the same for push mode.
+    Subclass of :class:`NixlPushConnector` using ``SpyreNixlPushConnectorWorker``.
 
 Registration
 ~~~~~~~~~~~~
@@ -37,8 +43,10 @@ Registration
 
     --kv-connector SpyreNixlConnector
 
-is accepted by vLLM's ``KVConnectorFactory`` without any ``--kv-connector-
-module-path`` override and without modifying vLLM's own ``factory.py``.
+is accepted by vLLM's ``KVConnectorFactory`` without any
+``--kv-connector-module-path`` override and without modifying vLLM's own
+``factory.py``.  (For robustness the manifests also pass
+``kv_connector_module_path`` which bypasses the registry entirely.)
 """
 
 from __future__ import annotations
@@ -47,14 +55,12 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
+import msgspec
 import torch
 
 from vllm.config import VllmConfig
 from vllm.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
 from vllm.distributed.kv_transfer.kv_connector.v1.base import KVConnectorRole
-from vllm.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
-    NixlBaseConnectorWorker,
-)
 from vllm.distributed.kv_transfer.kv_connector.v1.nixl.connector import (
     NixlPullConnector,
     NixlPushConnector,
@@ -64,6 +70,12 @@ from vllm.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     NixlHandshakePayload,
     compute_nixl_compatibility_hash,
 )
+from vllm.distributed.kv_transfer.kv_connector.v1.nixl.pull_worker import (
+    NixlPullConnectorWorker,
+)
+from vllm.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
+    NixlPushConnectorWorker,
+)
 from vllm.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
     TransferTopology,
 )
@@ -72,48 +84,32 @@ from vllm.logger import init_logger
 if TYPE_CHECKING:
     from vllm.v1.kv_cache_interface import KVCacheConfig
 
-import msgspec
-
 logger = init_logger(__name__)
 
 _DIAG = "[SpyreDiag]"
 
 
 # ---------------------------------------------------------------------------
-# Worker subclass
+# Mixin: only register_kv_caches() is Spyre-specific
 # ---------------------------------------------------------------------------
 
-class SpyreNixlConnectorWorker(NixlBaseConnectorWorker):
-    """NixlBaseConnectorWorker subclass for Spyre AIU hardware.
+class _SpyreRegisterKVCachesMixin:
+    """Mixin that overrides register_kv_caches() for SpyrePagedKVCache.
 
-    The only Spyre-specific concern is how KV-cache staging tensors are built
-    and registered with NIXL.  On Spyre, the KV cache lives in
-    ``SpyrePagedKVCache`` objects — individually-allocated per-page CPU
-    tensors that are non-contiguous in memory.  Upstream
-    ``NixlBaseConnectorWorker`` requires a contiguous layout per layer.
-
-    This class intercepts ``register_kv_caches()`` when the supplied caches
-    are ``SpyrePagedKVCache`` instances, allocates one contiguous CPU staging
-    tensor per layer (shape ``[num_blocks, num_kv_heads, block_size,
-    head_size]``) for both K and V, registers those staging tensors with NIXL,
-    and wires up ``_spyre_copy_blocks`` as ``self.copy_blocks`` so that the
-    inherited pull/push workers can move data between Spyre device pages and
-    the staging buffers.
-
-    For any other cache type the call is forwarded to the upstream
-    implementation unchanged, so this class is safe to use as a drop-in
-    replacement on non-Spyre platforms.
+    Delegates to super() (the upstream worker) for all other cache types so
+    this is safe on non-Spyre platforms.  Must appear before the upstream
+    worker class in the MRO so our override is found first.
     """
 
-    def register_kv_caches(self, kv_caches: dict[str, torch.Tensor]) -> None:
+    def register_kv_caches(self, kv_caches: dict[str, Any]) -> None:
         """Register KV caches with NIXL, handling SpyrePagedKVCache specially.
 
-        If *kv_caches* contains ``SpyrePagedKVCache`` values, allocate
-        contiguous CPU staging tensors and register those with NIXL; set up
-        ``_spyre_copy_blocks`` as the d2h / h2d copy operation.
+        SpyrePagedKVCache stores KV as individually-allocated per-page CPU
+        tensors (non-contiguous).  NixlConnector requires a contiguous layout
+        per layer.  We allocate contiguous CPU staging tensors, register them
+        with NIXL, and wire up ``_spyre_copy_blocks`` as ``self.copy_blocks``.
 
-        For all other cache types the upstream implementation is called
-        directly.
+        For any other cache type the upstream implementation is called directly.
         """
         if not kv_caches:
             logger.warning(
@@ -206,8 +202,6 @@ class SpyreNixlConnectorWorker(NixlBaseConnectorWorker):
         self.device_id = 0  # CPU staging tensors have no GPU device index
 
         # Register all staging tensors with NIXL (K then V per layer).
-        # Each staging tensor is contiguous: base_addr + block_i * page_bytes
-        # spans all num_blocks — exactly what _build_fa_remote expects.
         caches_data = []
         seen_base_addresses: list[int] = []
         for layer_name in kv_caches:
@@ -270,8 +264,6 @@ class SpyreNixlConnectorWorker(NixlBaseConnectorWorker):
             "%s prep_xfer_dlist(src/local) done %.3fs",
             _DIAG, time.perf_counter() - t_prep,
         )
-        # pull_worker._read_blocks_for_req looks up src_xfer_handles_by_block_size
-        # using the remote's block_size, so register under the local block_size.
         self.src_xfer_handles_by_block_size[self.block_size] = src_handle
 
         logger.info(
@@ -285,15 +277,30 @@ class SpyreNixlConnectorWorker(NixlBaseConnectorWorker):
 
 
 # ---------------------------------------------------------------------------
-# Connector facades
+# Concrete worker subclasses — one per upstream worker type
+# ---------------------------------------------------------------------------
+
+class SpyreNixlPullConnectorWorker(_SpyreRegisterKVCachesMixin, NixlPullConnectorWorker):
+    """Spyre-aware pull worker.  Passes isinstance(w, NixlPullConnectorWorker)."""
+    pass
+
+
+class SpyreNixlPushConnectorWorker(_SpyreRegisterKVCachesMixin, NixlPushConnectorWorker):
+    """Spyre-aware push worker.  Passes isinstance(w, NixlPushConnectorWorker)."""
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Connector facades — override __init__ to substitute the Spyre worker
 # ---------------------------------------------------------------------------
 
 class SpyreNixlConnector(NixlPullConnector):
     """Pull-based Spyre NIXL connector (kv_producer / kv_consumer).
 
     Identical to :class:`NixlPullConnector` except the worker-side object is
-    a :class:`SpyreNixlConnectorWorker` instead of
-    ``NixlPullConnectorWorker``.
+    a :class:`SpyreNixlPullConnectorWorker` instead of
+    ``NixlPullConnectorWorker``, so ``register_kv_caches()`` handles
+    ``SpyrePagedKVCache`` correctly.
     """
 
     def __init__(
@@ -302,27 +309,28 @@ class SpyreNixlConnector(NixlPullConnector):
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ) -> None:
-        # Let the parent set up scheduler + worker normally …
         super().__init__(vllm_config, role, kv_cache_config)
-        # … then replace the worker with the Spyre-aware subclass.
+        # Replace the plain NixlPullConnectorWorker with the Spyre-aware one.
+        # The parent __init__ already ran the expensive NIXL agent setup; we
+        # just replace the worker object with the same args to get Spyre's
+        # register_kv_caches() without re-running setup.
         if role == KVConnectorRole.WORKER:
-            from vllm.distributed.kv_transfer.kv_connector.v1.nixl.pull_worker import (
-                NixlPullConnectorWorker,
-            )
-            # Re-use the already-constructed parent worker's __dict__ to
-            # avoid duplicating the expensive __init__ (NIXL agent setup).
-            # We hot-swap the class so the overridden register_kv_caches()
-            # is used instead.
             assert self.connector_worker is not None
             assert isinstance(self.connector_worker, NixlPullConnectorWorker)
-            self.connector_worker.__class__ = SpyreNixlConnectorWorker
+            # Preserve all state by swapping the class — SpyreNixlPullConnectorWorker
+            # IS-A NixlPullConnectorWorker so isinstance() checks still pass.
+            self.connector_worker.__class__ = SpyreNixlPullConnectorWorker
+            logger.info(
+                "%s SpyreNixlConnector: worker upgraded to SpyreNixlPullConnectorWorker",
+                _DIAG,
+            )
 
 
 class SpyreNixlPushConnector(NixlPushConnector):
     """Push-based Spyre NIXL connector.
 
     Identical to :class:`NixlPushConnector` except the worker uses
-    :class:`SpyreNixlConnectorWorker`.
+    :class:`SpyreNixlPushConnectorWorker`.
     """
 
     def __init__(
@@ -333,12 +341,13 @@ class SpyreNixlPushConnector(NixlPushConnector):
     ) -> None:
         super().__init__(vllm_config, role, kv_cache_config)
         if role == KVConnectorRole.WORKER:
-            from vllm.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
-                NixlPushConnectorWorker,
-            )
             assert self.connector_worker is not None
             assert isinstance(self.connector_worker, NixlPushConnectorWorker)
-            self.connector_worker.__class__ = SpyreNixlConnectorWorker
+            self.connector_worker.__class__ = SpyreNixlPushConnectorWorker
+            logger.info(
+                "%s SpyreNixlPushConnector: worker upgraded to SpyreNixlPushConnectorWorker",
+                _DIAG,
+            )
 
 
 # ---------------------------------------------------------------------------
