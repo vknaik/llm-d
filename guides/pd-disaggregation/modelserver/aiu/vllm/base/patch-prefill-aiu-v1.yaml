@@ -52,7 +52,7 @@ spec:
                 --max-num-seqs $VLLM_MAX_NUM_SEQ \
                 --max-num-batched-tokens $VLLM_MAX_NUM_BATCHED_TOKENS \
                 --tensor-parallel-size $TP_SIZE \
-                --kv-transfer-config '{"kv_connector":"SpyreNixlConnector", "kv_role":"kv_producer"}' \
+                --kv-transfer-config '{"kv_connector":"SpyreNixlConnector","kv_connector_module_path":"spyre_inference.distributed.kv_transfer.kv_connector.v1.nixl.spyre_connector","kv_role":"kv_producer"}' \
                 --disable-uvicorn-access-log \
                 --disable-access-log-for-endpoints=/health,/metrics,/v1/models \
                 --enable-prefix-caching \
