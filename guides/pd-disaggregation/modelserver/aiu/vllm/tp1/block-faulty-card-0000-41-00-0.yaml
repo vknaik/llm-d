@@ -1,0 +1,47 @@
+# Dummy pod that holds the faulty Spyre AIU card 0000:41:00.0 on p1-worker-63.
+#
+# Purpose: Prevent the Kubernetes scheduler from allocating this card to workload
+# pods until it is physically replaced (RAS::PCI::BusFence 0xa35e fires on every
+# compute workload that touches it).
+#
+# The pod requests the specific per-card resource
+#   ibm.com/spyre_pf_0000_41_00.0: 1
+# which the Spyre device-plugin exposes as a singleton (capacity: 1).
+# Holding that resource means no other pod can receive it.
+#
+# The container itself does nothing — it just sleeps indefinitely.
+# Remove this pod once the card has been repaired/replaced.
+#
+apiVersion: v1
+kind: Pod
+metadata:
+  name: block-faulty-card-0000-41-00-0
+  namespace: llm-d-on-aiu
+  labels:
+    app: block-faulty-card
+    reason: ras-busframe-0xa35e
+  annotations:
+    description: "Holds faulty Spyre AIU card 0000:41:00.0 to prevent allocation to workloads. Remove after card replacement."
+spec:
+  restartPolicy: Always
+  schedulerName: spyre-scheduler
+  nodeSelector:
+    kubernetes.io/hostname: p1-worker-63
+  tolerations:
+    - operator: Exists
+  containers:
+    - name: blocker
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      command: ["/bin/sh", "-c", "echo 'Holding faulty card 0000:41:00.0. Remove this pod after card replacement.'; sleep infinity"]
+      resources:
+        requests:
+          ibm.com/spyre_pf_0000_41_00.0: "1"
+        limits:
+          ibm.com/spyre_pf_0000_41_00.0: "1"
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        capabilities:
+          drop: ["ALL"]
