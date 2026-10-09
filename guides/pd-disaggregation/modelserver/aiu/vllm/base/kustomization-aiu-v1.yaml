@@ -10,7 +10,7 @@ components:
 
 labels:
   - pairs:
-      llm-d.ai/model: granite-3.3-8b-instruct
+      llm-d.ai/model: granite-4.2-8b
       llm-d.ai/guide: pd-disaggregation
       llm-d.ai/accelerator-variant: aiu
       llm-d.ai/accelerator-vendor: ibm

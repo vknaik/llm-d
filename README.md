@@ -19,7 +19,7 @@ export HF_TOKEN="<YOUR_HUGGINGFACE_TOKEN>"
 
 # Target registry for Spyre vLLM container images
 export REGISTRY="${REGISTRY:-image-registry.openshift-image-registry.svc:5000/${NAMESPACE}}"
-export IMAGE_TAG="${IMAGE_TAG:-v20}"
+export IMAGE_TAG="${IMAGE_TAG:-v21}"
 ```
 
 > **Note on `HF_TOKEN`:** Ensure you set your Hugging Face access token before sourcing setup scripts, or update the `HF_TOKEN` variable in `setup/my-env-aiu-spyre.sh` (or `setup/my-env-gpu-pokprod001.sh`). Never commit secret tokens to version control.
@@ -43,14 +43,17 @@ cd docker
 
 This builds from `Dockerfile.vllm-spyre-nixl-latest` using:
 - **Base Image:** `spyre-inference-dev:latest`
+- **Model:** `ibm-granite/granite-4.2-8b`
 - **vLLM:** 0.28.0
 - **spyre-inference:** dev521
 - **torch-spyre:** 336dad30
-- **NIXL:** 8708e35e
-- **UCX:** 1.19.0
+- **NIXL:** v1.5.0 (`nixl` + `nixl-cu12` wheels)
+- **UCX:** 1.23.x (with `--enable-cma`)
+- **Connector:** Self-contained `SpyreNixlConnector` plugin pre-registered at import time
+- **Compile Timeout:** Pre-patched default `_COMPILE_TIMEOUT_S = 3600.0`
 
 The image is pushed to:
-`image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl-latest:v20`
+`image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl-latest:v21`
 
 ---
 
@@ -98,12 +101,17 @@ oc exec -it -n aiu-vllm test1-prefill-spyre-dev -- \
 
 ## 5. Running Performance Experiments
 
-Use `stream_timing.py` (`guides/pd-disaggregation/modelserver/aiu/vllm/scripts/stream_timing.py`) to measure TTFT and token generation throughput:
+Use `stream_timing.py` and `batch_stream_timing.py` (`guides/pd-disaggregation/modelserver/aiu/vllm/scripts/`) to measure TTFT, per-stream throughput, and concurrent batch scaling:
 
 ### 5.1 Standalone TP=1 Baseline (Exp A)
 ```bash
+# Single stream (max_tokens=50 or 200)
 oc exec -n aiu-vllm test1-prefill-spyre-dev -- \
-  python3 /tmp/stream_timing.py http://localhost:18001/v1/completions 5 50
+  python3 /tmp/stream_timing.py http://localhost:18001/v1/completions 10 50
+
+# Concurrent batch scaling (e.g. batch_size=2, 4, 8, 16)
+oc exec -n aiu-vllm test1-prefill-spyre-dev -- \
+  python3 /tmp/batch_stream_timing.py http://localhost:18001/v1/completions 2 10 50
 ```
 
 ### 5.2 TP=1 PD Disaggregation via Gateway (Exp C)
@@ -112,8 +120,13 @@ oc exec -n aiu-vllm test1-prefill-spyre-dev -- \
 GATEWAY_IP=$(oc get svc -n ${NAMESPACE} -l app.kubernetes.io/name=gateway -o jsonpath='{.items[0].spec.clusterIP}')
 PREFILL_POD=$(oc get pods -n ${NAMESPACE} -l llm-d.ai/role=prefill -o jsonpath='{.items[0].metadata.name}')
 
+# Single stream
 oc exec -n ${NAMESPACE} ${PREFILL_POD} -c modelserver -- \
-  python3 /tmp/stream_timing.py http://${GATEWAY_IP}:80/tp1/v1/completions 5 50
+  python3 /tmp/stream_timing.py http://${GATEWAY_IP}:80/tp1/v1/completions 10 50
+
+# Concurrent batch scaling (e.g. batch_size=2, 4, 8, 16)
+oc exec -n ${NAMESPACE} ${PREFILL_POD} -c modelserver -- \
+  python3 /tmp/batch_stream_timing.py http://${GATEWAY_IP}:80/tp1/v1/completions 2 10 50
 ```
 
 ### 5.3 TP=2 PD Disaggregation via Gateway (Exp D)
@@ -122,8 +135,13 @@ oc exec -n ${NAMESPACE} ${PREFILL_POD} -c modelserver -- \
 GATEWAY_IP=$(oc get svc -n ${NAMESPACE} -l app.kubernetes.io/name=gateway -o jsonpath='{.items[0].spec.clusterIP}')
 PREFILL_POD=$(oc get pods -n ${NAMESPACE} -l llm-d.ai/role=prefill -o jsonpath='{.items[0].metadata.name}')
 
+# Single stream
 oc exec -n ${NAMESPACE} ${PREFILL_POD} -c modelserver -- \
-  python3 /tmp/stream_timing.py http://${GATEWAY_IP}:80/v1/completions 5 50
+  python3 /tmp/stream_timing.py http://${GATEWAY_IP}:80/v1/completions 10 50
+
+# Concurrent batch scaling (e.g. batch_size=2, 4, 8, 16)
+oc exec -n ${NAMESPACE} ${PREFILL_POD} -c modelserver -- \
+  python3 /tmp/batch_stream_timing.py http://${GATEWAY_IP}:80/v1/completions 2 10 50
 ```
 
 ---
@@ -134,6 +152,7 @@ oc exec -n ${NAMESPACE} ${PREFILL_POD} -c modelserver -- \
 ├── docker/
 │   ├── Dockerfile.vllm-spyre-nixl-latest
 │   ├── build-vllm-spyre-nixl-latest.sh
+│   ├── patches/                        # Self-contained build patches (SpyreNixlConnector, utils)
 │   └── vllm-spyre-nixl-latest-buildconfig.yaml
 ├── guides/
 │   └── pd-disaggregation/
@@ -142,8 +161,8 @@ oc exec -n ${NAMESPACE} ${PREFILL_POD} -c modelserver -- \
 │               └── vllm/
 │                   ├── base/           # TP=2 Disaggregated PD manifests
 │                   ├── tp1/            # TP=1 Disaggregated PD manifests
-│                   ├── patches/        # Patched base_worker.py & utils.py
-│                   └── scripts/        # run_vllm_nixl.sh, stream_timing.py, patch-async-compile-timeout.sh
+│                   ├── patches/        # Patched connector & bridge sources
+│                   └── scripts/        # Benchmark and startup scripts (batch_stream_timing.py, stream_timing.py, run_vllm_nixl.sh, run_vllm_standalone.sh)
 └── setup/
     └── my-env-aiu-spyre.sh             # Cluster environment setup
 ```

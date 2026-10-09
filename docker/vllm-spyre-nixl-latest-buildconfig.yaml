@@ -7,7 +7,7 @@ spec:
   output:
     to:
       kind: ImageStreamTag
-      name: vllm-spyre-nixl-latest:v18
+      name: vllm-spyre-nixl-latest:v21
   source:
     type: Binary
     binary: {}

@@ -8,7 +8,7 @@
 set -e
 
 ROLE=${1:-prefill}
-MODEL_PATH="${MODEL_PATH:-/models/models/ibm-granite/granite-3.3-8b-instruct}"
+MODEL_PATH="${MODEL_PATH:-/models/models/ibm-granite/granite-4.2-8b}"
 PREFILL_IP="${PREFILL_IP:-127.0.0.1}"
 DECODE_IP="${DECODE_IP:-127.0.0.1}"
 
@@ -57,7 +57,7 @@ export VLLM_NIXL_REMOTE_HOST=$PREFILL_IP
 # Note: VLLM_NIXL_SIDE_CHANNEL_HOST is used by ZMQ listener on the respective server
 
 if [ "$ROLE" = "prefill" ]; then
-    echo "Starting vLLM Prefill (Producer) with NixlConnector..."
+    echo "Starting vLLM Prefill (Producer) with SpyreNixlConnector..."
     export VLLM_NIXL_SIDE_CHANNEL_HOST=$PREFILL_IP
 
     nohup vllm serve $MODEL_PATH \
@@ -66,13 +66,13 @@ if [ "$ROLE" = "prefill" ]; then
       --port 8000 \
       --max-model-len 8192 \
       --block-size 64 \
-      --max_num_seqs 2 \
+      --max_num_seqs 16 \
       --tensor-parallel-size 1 \
       --max-num-batched-tokens 4096 \
       --dtype bfloat16 \
       --no-disable-hybrid-kv-cache-manager \
       --enable-prefix-caching \
-      --kv-transfer-config '{"kv_connector":"NixlConnector", "kv_role":"kv_producer"}' \
+      --kv-transfer-config '{"kv_connector":"SpyreNixlConnector", "kv_role":"kv_producer"}' \
       --disable-access-log-for-endpoints=/health,/metrics,/v1/models \
       > /home/senuser/workspace/logs/vllm-prefill-kv-enabled-$(date +%m%d%Y).log 2>&1 &
 
@@ -80,7 +80,7 @@ if [ "$ROLE" = "prefill" ]; then
     echo $! > /home/senuser/vllm-server.pid
     echo "Log: /home/senuser/workspace/logs/vllm-prefill-kv-enabled-$(date +%m%d%Y).log"
 else
-    echo "Starting vLLM Decode (Consumer) with NixlConnector..."
+    echo "Starting vLLM Decode (Consumer) with SpyreNixlConnector..."
     export VLLM_NIXL_SIDE_CHANNEL_HOST=$DECODE_IP
 
     nohup vllm serve $MODEL_PATH \
@@ -89,13 +89,13 @@ else
       --port 8001 \
       --max-model-len 8192 \
       --block-size 64 \
-      --max_num_seqs 2 \
+      --max_num_seqs 16 \
       --tensor-parallel-size 1 \
       --max-num-batched-tokens 4096 \
       --dtype bfloat16 \
       --no-disable-hybrid-kv-cache-manager \
       --enable-prefix-caching \
-      --kv-transfer-config '{"kv_connector":"NixlConnector", "kv_role":"kv_consumer"}' \
+      --kv-transfer-config '{"kv_connector":"SpyreNixlConnector", "kv_role":"kv_consumer"}' \
       --disable-access-log-for-endpoints=/health,/metrics,/v1/models \
       > /home/senuser/workspace/logs/vllm-decode-kv-enabled-$(date +%m%d%Y).log 2>&1 &
 

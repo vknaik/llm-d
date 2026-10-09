@@ -39,6 +39,11 @@ if ! oc get buildconfig "${BUILDCONFIG_NAME}" -n "${NAMESPACE}" &>/dev/null; the
     exit 1
 fi
 
+# Update output ImageStreamTag on BuildConfig to match requested tag
+echo "Updating BuildConfig ${BUILDCONFIG_NAME} output tag to ${IMAGE_NAME}:${TAG}..."
+oc patch bc "${BUILDCONFIG_NAME}" -n "${NAMESPACE}" --type='merge' \
+    -p "{\"spec\":{\"output\":{\"to\":{\"kind\":\"ImageStreamTag\",\"name\":\"${IMAGE_NAME}:${TAG}\"}}}}"
+
 # Start the build from the current directory
 echo "Starting build from directory: $(pwd)"
 oc start-build "${BUILDCONFIG_NAME}" \

@@ -7,7 +7,7 @@
 set -e
 
 ROLE=${1:-prefill}
-MODEL_PATH="${MODEL_PATH:-/models/models/ibm-granite/granite-3.3-8b-instruct}"
+MODEL_PATH="${MODEL_PATH:-/models/models/ibm-granite/granite-4.2-8b}"
 PREFILL_IP="${PREFILL_IP:-127.0.0.1}"
 DECODE_IP="${DECODE_IP:-127.0.0.1}"
 
@@ -57,7 +57,7 @@ if [ "$ROLE" = "prefill" ]; then
       --port 18001 \
       --max-model-len 8192 \
       --block-size 64 \
-      --max_num_seqs 2 \
+      --max_num_seqs 16 \
       --tensor-parallel-size 1 \
       --max-num-batched-tokens 4096 \
       --dtype bfloat16 \
@@ -80,7 +80,7 @@ else
       --port 18001 \
       --max-model-len 8192 \
       --block-size 64 \
-      --max_num_seqs 2 \
+      --max_num_seqs 16 \
       --tensor-parallel-size 1 \
       --max-num-batched-tokens 4096 \
       --dtype bfloat16 \

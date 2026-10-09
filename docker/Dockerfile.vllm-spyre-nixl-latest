@@ -7,30 +7,33 @@ FROM ${BASE_IMAGE}
 
 USER root
 
-# Configuration - use NIXL commit with capture_telemetry but flexible torch dependency
-# NIXL_VERSION: currently pinned to 8708e35e (Sep 15 2025 — last stable for Spyre).
-# NEXT STEP: evaluate upgrading to a more recent commit, e.g. c1806281 (Sep 18 2026,
-# "backend: tolerate a null customParams in nixlBackendEngine") or later after validating
-# UCX/AIU compatibility.  The latest main as of Sep 23 2026 is c8d94ee7.
-ENV UCX_VERSION="1.19.0" \
+# Configuration - use UCX 1.23.x and NIXL v1.5.0
+ENV UCX_VERSION="1.23.x" \
     UCX_INSTALL_PREFIX="/opt/ucx" \
-    NIXL_VERSION="8708e35e" \
+    NIXL_VERSION="v1.5.0" \
     NIXL_INSTALL_PREFIX="/opt/nixl"
 
 # Install system dependencies for UCX
 RUN dnf install -y \
     wget \
+    git \
+    automake \
+    autoconf \
+    libtool \
     rdma-core-devel \
     libibverbs-devel \
     librdmacm-devel \
     numactl-libs \
+    numactl-devel \
     && dnf clean all
 
-# Build and install UCX 1.19.0
+# Build and install UCX 1.23.x
 WORKDIR /tmp
-RUN wget https://github.com/openucx/ucx/releases/download/v${UCX_VERSION}/ucx-${UCX_VERSION}.tar.gz && \
-    tar -xzf ucx-${UCX_VERSION}.tar.gz && \
-    cd ucx-${UCX_VERSION} && \
+RUN (git clone --depth 1 --branch v${UCX_VERSION} https://github.com/openucx/ucx.git || \
+     git clone --depth 1 --branch ${UCX_VERSION} https://github.com/openucx/ucx.git || \
+     (wget https://github.com/openucx/ucx/releases/download/v${UCX_VERSION}/ucx-${UCX_VERSION}.tar.gz && tar -xzf ucx-${UCX_VERSION}.tar.gz && mv ucx-${UCX_VERSION} ucx)) && \
+    cd ucx && \
+    ([ -f configure ] || ./autogen.sh) && \
     ./configure \
         --prefix=${UCX_INSTALL_PREFIX} \
         --enable-shared \
@@ -47,10 +50,10 @@ RUN wget https://github.com/openucx/ucx/releases/download/v${UCX_VERSION}/ucx-${
     echo "${UCX_INSTALL_PREFIX}/lib" > /etc/ld.so.conf.d/ucx.conf && \
     ldconfig && \
     cd /tmp && \
-    rm -rf ucx-${UCX_VERSION} ucx-${UCX_VERSION}.tar.gz && \
+    rm -rf ucx* && \
     (ldconfig -p | grep libucx || true) && \
     ${UCX_INSTALL_PREFIX}/bin/ucx_info -v && \
-    echo "UCX 1.19.0 installed successfully"
+    echo "UCX ${UCX_VERSION} installed successfully"
 
 # Install Python build tools and dependencies for NIXL
 RUN dnf install -y \
@@ -61,13 +64,15 @@ RUN dnf install -y \
     python3-pip \
     python3-devel && \
     dnf clean all && \
-    pip3 install --no-cache-dir pybind11 meson ninja meson-python build wheel pytest patchelf types-PyYAML
+    pip3 install --no-cache-dir pybind11 meson ninja meson-python build wheel pytest patchelf types-PyYAML setuptools pyyaml
 
 # Build and install NIXL
 RUN cd /tmp && \
     git clone https://github.com/ai-dynamo/nixl.git && \
     cd nixl && \
-    git checkout ${NIXL_VERSION} && \
+    (git checkout ${NIXL_VERSION} || git checkout v${NIXL_VERSION}) && \
+    sed -i -E 's/,? *"torch==[^"]*"//g' pyproject.toml && \
+    sed -i -E 's/"setuptools>=[^"]*"/"setuptools"/g' pyproject.toml && \
     export PKG_CONFIG_PATH="${UCX_INSTALL_PREFIX}/lib/pkgconfig:/usr/lib64/pkgconfig:/usr/share/pkgconfig:${PKG_CONFIG_PATH}" && \
     export LD_LIBRARY_PATH="${UCX_INSTALL_PREFIX}/lib:${LD_LIBRARY_PATH}" && \
     python3 -m mesonbuild.mesonmain setup build --prefix=${NIXL_INSTALL_PREFIX} -Ducx_path=${UCX_INSTALL_PREFIX} && \
@@ -76,8 +81,10 @@ RUN cd /tmp && \
     ninja install && \
     cd /tmp/nixl && \
     python3 -m build --no-isolation --wheel && \
-    pip3 install --no-cache-dir dist/*.whl && \
+    pip3 install --no-cache-dir --no-deps dist/*.whl && \
+    (find build/src/bindings/python/nixl-meta -name "*.whl" -exec pip3 install --no-cache-dir --no-deps {} + 2>/dev/null || true) && \
     echo "${NIXL_INSTALL_PREFIX}/lib" > /etc/ld.so.conf.d/nixl.conf && \
+    echo "${NIXL_INSTALL_PREFIX}/lib64" >> /etc/ld.so.conf.d/nixl.conf && \
     ldconfig && \
     cd /tmp && \
     rm -rf nixl && \
@@ -103,6 +110,14 @@ RUN git clone https://github.com/torch-spyre/spyre-inference.git && \
     uv sync 2>&1 | tee /home/senuser/spyre-inference-build.log && \
     echo "spyre-inference built and installed successfully"
 
+# Copy Spyre NIXL connector patches and vLLM utils directly into spyre-inference & venv
+COPY --chown=1234:0 patches/spyre_inference/ /home/senuser/spyre-inference/spyre_inference/
+COPY --chown=1234:0 patches/utils.py /home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/utils.py
+
+# Patch torch_spyre compile timeout default
+RUN sed -i 's/_COMPILE_TIMEOUT_S = 60.0/_COMPILE_TIMEOUT_S = 3600.0/' \
+    /home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/torch_spyre/execution/async_compile.py 2>/dev/null || true
+
 # Back to root for final permissions setup
 USER root
 
@@ -125,6 +140,7 @@ ENV PATH="${UCX_INSTALL_PREFIX}/bin:${NIXL_INSTALL_PREFIX}/bin:/home/senuser/spy
     PYTHONPATH="${NIXL_INSTALL_PREFIX}/lib64/python3.12/site-packages:$PYTHONPATH" \
     VLLM_PLUGINS=spyre_inference \
     VIRTUAL_ENV="/home/senuser/spyre-inference/.venv" \
-    SPYRE_COMMS_INSTALL_DIR="/opt/ibm/spyre/spyre-comms"
+    SPYRE_COMMS_INSTALL_DIR="/opt/ibm/spyre/spyre-comms" \
+    _COMPILE_TIMEOUT_S="3600.0"
 
 CMD ["bash", "-l", "/home/senuser/.local/bin/dev_entrypoint.sh"]

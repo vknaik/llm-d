@@ -1,0 +1,113 @@
+# Test workload pod that specifically targets the faulty Spyre AIU card 0000:41:00.0 on node p1-worker-63.
+#
+# Purpose:
+#   Directly allocates the specific PCI card (ibm.com/spyre_pf_0000_41_00.0: 1) on node p1-worker-63
+#   and runs a vLLM / torch-spyre compilation and warmup workload to reproduce the hardware RAS fault
+#   (RAS::PCI::BusFence 0xa35e) during the Spyre AIU compile/warmup phase (~2.5 minutes after startup).
+#
+# Verification / Reproduction steps:
+#   1. Apply this manifest:
+#        oc apply -f test-faulty-card-0000-41-00-0.yaml
+#   2. Check pod logs:
+#        oc logs -n llm-d-on-aiu test-faulty-card-0000-41-00-0 -f
+#   3. Monitor spyre-metrics-exporter / device-plugin on p1-worker-63:
+#        oc logs -n spyre-operator -l app=spyre-metrics-exporter --field-selector spec.nodeName=p1-worker-63 -f
+#        oc logs -n spyre-operator -l app=spyre-device-plugin --field-selector spec.nodeName=p1-worker-63 -f
+#   4. Check node kernel/system journal logs:
+#        oc adm node-logs p1-worker-63 -g "0000:41:00.0|RAS|BusFence|0xa35e"
+#
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-faulty-card-0000-41-00-0
+  namespace: llm-d-on-aiu
+  labels:
+    app: test-faulty-card
+    card-bdf: "0000-41-00-0"
+spec:
+  schedulerName: spyre-scheduler
+  serviceAccountName: pd-disaggregation-ibm-aiu-vllm-sa
+  nodeSelector:
+    kubernetes.io/hostname: p1-worker-63
+  restartPolicy: Never
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl-latest:v20
+    imagePullPolicy: IfNotPresent
+    command: ["/bin/bash", "-c"]
+    args:
+    - |
+      set -ex
+      echo "=== Testing Spyre AIU Card Allocation ==="
+      env | grep -i pci || true
+      
+      export PATH=/opt/ibm/spyre/deeptools/bin:/opt/ibm/spyre/bin:${PATH}
+      export LD_LIBRARY_PATH=/opt/ibm/spyre/tvm/lib:/opt/ibm/spyre/spyre-comms/lib:/opt/ibm/spyre/runtime/lib:/opt/ibm/spyre/deeptools/lib:/opt/ibm/spyre/senlib/lib:/opt/ibm/spyre/sentinyexec/lib:/opt/ucx/lib:/opt/nixl/lib64:${LD_LIBRARY_PATH:-}
+      export NIXL_PLUGIN_DIR=/opt/nixl/lib64/plugins
+      export DEEPTOOLS_PATH=/opt/ibm/spyre/deeptools/share
+      export TORCHINDUCTOR_CACHE_DIR=/share/torch_sendnn_cache
+      export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=3600
+      export UCX_TLS=cma,sysv,posix,tcp,self
+      export UCX_ZCOPY_THRESH=1
+      export VLLM_SPYRE_DYNAMO_BACKEND=eager
+      
+      cd /home/senuser/spyre-inference/
+      source .venv/bin/activate
+      
+      # Patch async_compile timeout to 3600s
+      sed -i "s/_COMPILE_TIMEOUT_S = 60.0/_COMPILE_TIMEOUT_S = 3600.0/g" /home/senuser/spyre-inference/.venv/lib/python3.12/site-packages/torch_spyre/execution/async_compile.py 2>/dev/null || true
+      
+      MODEL_PATH="/models/models/ibm-granite/granite-3.3-8b-instruct"
+      
+      echo "Starting vLLM to trigger Spyre AIU compilation and warmup on card 0000:41:00.0..."
+      python3 -m vllm.entrypoints.openai.api_server \
+        --model $MODEL_PATH \
+        --served-model-name granite-8b \
+        --host 0.0.0.0 \
+        --port 18001 \
+        --max-model-len 8192 \
+        --block-size 64 \
+        --max_num_seqs 2 \
+        --tensor-parallel-size 1 \
+        --max-num-batched-tokens 4096 \
+        --dtype bfloat16 \
+        --no-disable-hybrid-kv-cache-manager \
+        --enable-prefix-caching
+    env:
+    - name: DEV_SHORTNAME
+      value: test-faulty-card
+    - name: HF_HOME
+      value: /models/huggingface_cache
+    - name: HF_HUB_DISABLE_XET
+      value: "1"
+    - name: TORCH_SENDNN_CACHE_ENABLE
+      value: "1"
+    - name: TORCH_SENDNN_CACHE_DIR
+      value: /share/torch_sendnn_cache
+    resources:
+      limits:
+        ibm.com/spyre_pf_0000_41_00.0: "1"
+      requests:
+        ibm.com/spyre_pf_0000_41_00.0: "1"
+    volumeMounts:
+    - name: dev-shm
+      mountPath: /dev/shm
+    - name: models
+      mountPath: /models
+    - name: share
+      mountPath: /share
+  terminationGracePeriodSeconds: 0
+  volumes:
+  - name: dev-shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 8Gi
+  - name: models
+    persistentVolumeClaim:
+      claimName: model-pvc
+  - name: share
+    persistentVolumeClaim:
+      claimName: llm-d-vllm-spyre

@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: download-granite-42-8b
+  namespace: llm-d-on-aiu
+  labels:
+    app: model-downloader
+spec:
+  restartPolicy: Never
+  serviceAccountName: pd-disaggregation-ibm-aiu-vllm-sa
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: downloader
+    image: image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl-latest:v20
+    imagePullPolicy: IfNotPresent
+    command: ["/bin/bash", "-c"]
+    args:
+    - |
+      set -ex
+      echo "=== Starting Hugging Face Model Download for ibm-granite/granite-4.2-8b ==="
+      TARGET_DIR="/model-cache/models/ibm-granite/granite-4.2-8b"
+      mkdir -p "$TARGET_DIR"
+      
+      source /home/senuser/spyre-inference/.venv/bin/activate
+      
+      python3 -c '
+      import os, sys
+      from huggingface_hub import snapshot_download
+
+      token = os.environ.get("HF_TOKEN")
+      model_id = "ibm-granite/granite-4.2-8b"
+      local_dir = "/model-cache/models/ibm-granite/granite-4.2-8b"
+
+      print(f"Downloading {model_id} into {local_dir}...")
+      snapshot_download(
+          repo_id=model_id,
+          local_dir=local_dir,
+          token=token,
+          local_dir_use_symlinks=False,
+          resume_download=True
+      )
+      print("Download completed successfully!")
+      '
+      
+      echo "=== Files in $TARGET_DIR ==="
+      ls -la "$TARGET_DIR"
+    env:
+    - name: HF_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: llm-d-hf-token
+          key: HF_TOKEN
+    - name: HF_HOME
+      value: /model-cache/huggingface_cache
+    volumeMounts:
+    - name: model-cache
+      mountPath: /model-cache
+  volumes:
+  - name: model-cache
+    persistentVolumeClaim:
+      claimName: model-pvc

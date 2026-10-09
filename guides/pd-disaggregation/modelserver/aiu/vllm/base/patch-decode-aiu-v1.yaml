@@ -44,26 +44,6 @@ spec:
               . /etc/bashrc-sentient-env.sh
               setup_multi_aiu_env
               source /home/senuser/spyre-inference/.venv/bin/activate
-              # Patch torch_spyre compile timeout (default 60s too short for first-time kv_producer/consumer)
-              _ACOMP=/home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/torch_spyre/execution/async_compile.py
-              grep -q '_COMPILE_TIMEOUT_S = 60.0' "$_ACOMP" 2>/dev/null && \
-                sed -i 's/_COMPILE_TIMEOUT_S = 60.0/_COMPILE_TIMEOUT_S = 3600.0/' "$_ACOMP"
-              # Install Spyre NIXL connector subclass into spyre_inference package.
-              # This replaces the old approach of overwriting vLLM's base_worker.py.
-              SPYRE_NIXL_DIR=/home/senuser/spyre-inference/spyre_inference/distributed/kv_transfer/kv_connector/v1/nixl
-              mkdir -p ${SPYRE_NIXL_DIR}
-              for d in \
-                /home/senuser/spyre-inference/spyre_inference/distributed/kv_transfer \
-                /home/senuser/spyre-inference/spyre_inference/distributed/kv_transfer/kv_connector \
-                /home/senuser/spyre-inference/spyre_inference/distributed/kv_transfer/kv_connector/v1 \
-                ${SPYRE_NIXL_DIR}; do
-                touch ${d}/__init__.py
-              done
-              cp /share/test2-prefill/workspace/files-modified/spyre_connector.py ${SPYRE_NIXL_DIR}/spyre_connector.py
-              cp /share/test2-prefill/workspace/files-modified/spyre_inference_init.py \
-                 /home/senuser/spyre-inference/spyre_inference/__init__.py
-              cp /share/test2-prefill/workspace/files-modified/utils.py \
-                 /home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/utils.py
               vllm serve /model-cache/$MODEL_PATH \
                 --host 0.0.0.0 \
                 --served-model-name $MODEL_NAME \
@@ -73,7 +53,7 @@ spec:
                 --max-num-seqs $VLLM_MAX_NUM_SEQ \
                 --max-num-batched-tokens $VLLM_MAX_NUM_BATCHED_TOKENS \
                 --tensor-parallel-size $TP_SIZE \
-                --kv-transfer-config '{"kv_connector":"SpyreNixlConnector","kv_connector_module_path":"spyre_inference.distributed.kv_transfer.kv_connector.v1.nixl.spyre_connector","kv_role":"kv_consumer"}' \
+                --kv-transfer-config '{"kv_connector":"SpyreNixlConnector","kv_role":"kv_consumer"}' \
                 --disable-uvicorn-access-log \
                 --disable-access-log-for-endpoints=/health,/metrics,/v1/models \
                 --enable-prefix-caching \
@@ -94,7 +74,7 @@ spec:
             - name: AIU_SETUP_MULTI_AIU
               value: "1"
             - name: MODEL_PATH
-              value: models/ibm-granite/granite-3.3-8b-instruct
+              value: models/ibm-granite/granite-4.2-8b
             - name: MODEL_NAME
               value: granite-8b
             - name: VLLM_BACKEND_PORT
@@ -197,8 +177,6 @@ spec:
               name: vllm-config
             - mountPath: /.triton
               name: triton-cache
-            - mountPath: /share
-              name: share
           startupProbe:
             initialDelaySeconds: 15
             periodSeconds: 30
@@ -237,6 +215,3 @@ spec:
           emptyDir: {}
         - name: triton-cache
           emptyDir: {}
-        - name: share
-          persistentVolumeClaim:
-            claimName: llm-d-vllm-spyre
