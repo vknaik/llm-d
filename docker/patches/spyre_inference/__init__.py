@@ -57,12 +57,16 @@ def register():
     # Register Spyre-specific NIXL KV-transfer connectors so that
     # --kv-connector SpyreNixlConnector is accepted by KVConnectorFactory.
     try:
-        from spyre_inference.distributed.kv_transfer.kv_connector.v1.nixl.spyre_connector import (
-            register_spyre_nixl_connectors,
+        from vllm.distributed.kv_transfer.kv_connector.factory import (
+            KVConnectorFactory,
         )
-        register_spyre_nixl_connectors()
-    except Exception:
-        pass  # Gracefully degrade if vllm KVConnectorFactory layout changes
+        KVConnectorFactory.register_connector(
+            "SpyreNixlConnector",
+            "spyre_inference.distributed.kv_transfer.kv_connector.v1.nixl.spyre_connector",
+            "SpyreNixlConnector",
+        )
+    except Exception as e:
+        logger.error(f"Failed to register Spyre NIXL connectors: {e}", exc_info=True)
 
     return 'spyre_inference.platform.TorchSpyrePlatform'
 

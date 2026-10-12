@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """
-Concurrent batch streaming benchmark script.
-Measures TTFT, total request time, per-stream tok/s, and aggregate batch tok/s.
+Comprehensive benchmark suite runner for Spyre AIU vLLM.
+Measures TTFT, total time, aggregate tok/s, post-TTFT tok/s over N iterations.
 """
-
 import json
 import time
 import sys
+import os
 import urllib.request
 import numpy as np
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:18001/v1/completions"
-BATCH_SIZE = int(sys.argv[2]) if len(sys.argv) > 2 else 2
+BATCH_SIZE = int(sys.argv[2]) if len(sys.argv) > 2 else 1
 N_ITERATIONS = int(sys.argv[3]) if len(sys.argv) > 3 else 10
 MAX_TOKENS = int(sys.argv[4]) if len(sys.argv) > 4 else 50
+OUTPUT_JSON = sys.argv[5] if len(sys.argv) > 5 else None
 
 PROMPT = "The quick brown fox jumps over the lazy dog. What does this sentence demonstrate?"
 
@@ -28,7 +29,6 @@ PAYLOAD = {
 }
 
 def send_single_stream(req_id, url, payload, max_retries=5):
-    """Sends a single streaming request with retry logic on empty/transient errors."""
     for attempt in range(max_retries):
         t0 = time.monotonic()
         ttft = None
@@ -60,8 +60,7 @@ def send_single_stream(req_id, url, payload, max_retries=5):
         except Exception as e:
             error_msg = str(e)
             
-        t1 = time.monotonic()
-        total_time = t1 - t0
+        total_time = time.monotonic() - t0
         
         if ttft is not None and token_count > 0:
             tps_total = token_count / total_time if total_time > 0 else 0
@@ -76,7 +75,7 @@ def send_single_stream(req_id, url, payload, max_retries=5):
                 "success": True,
                 "attempts": attempt + 1
             }
-        time.sleep(1.0)
+        time.sleep(0.5)
         
     return {
         "req_id": req_id,
@@ -92,18 +91,14 @@ def send_single_stream(req_id, url, payload, max_retries=5):
 
 def run_batch_iteration(iteration_num, batch_size, url, payload):
     batch_t0 = time.monotonic()
-    futures = []
     with ThreadPoolExecutor(max_workers=batch_size) as executor:
-        for b in range(batch_size):
-            futures.append(executor.submit(send_single_stream, b + 1, url, payload))
-            
+        futures = [executor.submit(send_single_stream, b + 1, url, payload) for b in range(batch_size)]
         stream_results = [f.result() for f in futures]
-    batch_t1 = time.monotonic()
-    batch_wall_time = batch_t1 - batch_t0
+    batch_wall_time = time.monotonic() - batch_t0
     
     successful_streams = [s for s in stream_results if s["success"]]
     if not successful_streams:
-        print(f"Iteration {iteration_num}: ALL STREAMS FAILED", flush=True)
+        print(f"Iter {iteration_num:2d}: ALL STREAMS FAILED", flush=True)
         return None
         
     total_tokens = sum(s["token_count"] for s in successful_streams)
@@ -115,7 +110,7 @@ def run_batch_iteration(iteration_num, batch_size, url, payload):
     print(f"Iter {iteration_num:2d}: {len(successful_streams)}/{batch_size} streams, "
           f"Total Toks={total_tokens}, Wall={batch_wall_time:.2f}s, "
           f"Agg tok/s={agg_tok_s:.4f}, Mean TTFT={mean_ttft:.3f}s, "
-          f"Stream tok/s(post-TTFT)={mean_post_tps:.4f}", flush=True)
+          f"Post-TTFT tok/s={mean_post_tps:.4f}", flush=True)
           
     return {
         "iteration": iteration_num,
@@ -163,7 +158,7 @@ def main():
     print(f"Per-Stream Total (tok/s):     {np.mean(total_tps):.4f} ± {np.std(total_tps, ddof=ddof):.4f}")
     print("="*60)
     
-    output = {
+    result_data = {
         "batch_size": BATCH_SIZE,
         "max_tokens": MAX_TOKENS,
         "num_iterations": len(all_iterations),
@@ -182,8 +177,10 @@ def main():
         "iterations": all_iterations
     }
     
-    with open(f"/tmp/batch_results_b{BATCH_SIZE}_t{MAX_TOKENS}.json", "w") as f:
-        json.dump(output, f, indent=2)
+    if OUTPUT_JSON:
+        with open(OUTPUT_JSON, "w") as f:
+            json.dump(result_data, f, indent=2)
+        print(f"Results saved to {OUTPUT_JSON}")
 
 if __name__ == "__main__":
     main()
