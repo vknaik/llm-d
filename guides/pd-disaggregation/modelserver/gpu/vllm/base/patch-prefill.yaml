@@ -6,25 +6,30 @@ spec:
   replicas: 1
   template:
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: p1-gpu-worker-1
       containers:
         - name: modelserver
           command: ["vllm", "serve"]
           args:
-            - "Qwen/Qwen3-32B"
+            - "/model-cache/models/ibm-granite/granite-4.2-8b"
+            - "--served-model-name=granite-8b"
             - "--disable-access-log-for-endpoints=/health,/metrics,/v1/models"
             - "--tensor-parallel-size=1"
             - "--block-size=128"
             - "--kv-transfer-config"
             - '{"kv_connector":"NixlConnector", "kv_role":"kv_both"}'
             - "--no-disable-hybrid-kv-cache-manager"
-            - "--gpu-memory-utilization=0.95"
-            - "--max-model-len=32768"
+            - "--gpu-memory-utilization=0.9"
+            - "--max-model-len=8192"
           env:
             - name: HF_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: llm-d-hf-token
                   key: HF_TOKEN
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "GPU-16370a6c-0c74-2da2-6417-54e00f206772"
             - name: VLLM_NIXL_SIDE_CHANNEL_HOST
               valueFrom:
                 fieldRef:
@@ -43,26 +48,20 @@ spec:
               value: /.cache
             - name: XDG_CONFIG_HOME
               value: /.config
-            # NOTE: vLLM 0.19.X and 0.20.X images ship both nixl-cu13 and nixl-cu12;
-            # NIXL can pick the wrong UCX libraries. Uncomment UCX_MODULE_DIR only
-            # if you are running a cu129 version of vLLM.
-            # - name: UCX_MODULE_DIR
-            #   value: /usr/local/lib/python3.12/dist-packages/nixl_cu12.libs/ucx
-            # Default vLLM keep-alive (5s) is shorter than llm-d-routing-sidecar's default idle
-            # conn timeout (90s, from Go http.Transport), causing TCP RSTs on reuse.
-            # Server keep-alive must be >= sidecar idle timeout; configured to 120s.
             - name: VLLM_HTTP_TIMEOUT_KEEP_ALIVE
               value: "120"
           resources:
             limits:
               cpu: "8"
-              memory: 16Gi
+              memory: 32Gi
               nvidia.com/gpu: "1"
             requests:
               cpu: "8"
-              memory: 16Gi
+              memory: 32Gi
               nvidia.com/gpu: "1"
           volumeMounts:
+            - mountPath: /model-cache
+              name: model-vol
             - mountPath: /dev/shm
               name: shm
             - mountPath: /.cache
@@ -73,7 +72,7 @@ spec:
               name: triton-cache
           startupProbe:
             initialDelaySeconds: 15
-            periodSeconds: 30
+            periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 120
           livenessProbe:
@@ -85,6 +84,9 @@ spec:
             timeoutSeconds: 2
             failureThreshold: 3
       volumes:
+        - name: model-vol
+          persistentVolumeClaim:
+            claimName: model-pvc
         - name: shm
           emptyDir:
             medium: Memory

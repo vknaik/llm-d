@@ -1,0 +1,208 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pd-disaggregation-hybrid-nvidia-gpu-vllm-decode
+  namespace: llm-d-on-gpu
+  labels:
+    llm-d.ai/guide: pd-disaggregation-hybrid
+    llm-d.ai/role: decode
+    llm-d.ai/model: granite-4.2-8b
+    llm-d.ai/engine-type: vllm
+    llm-d.ai/accelerator-variant: gpu
+    llm-d.ai/accelerator-vendor: nvidia
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+  selector:
+    matchLabels:
+      llm-d.ai/guide: pd-disaggregation-hybrid
+      llm-d.ai/role: decode
+  template:
+    metadata:
+      labels:
+        llm-d.ai/guide: pd-disaggregation-hybrid
+        llm-d.ai/role: decode
+        llm-d.ai/model: granite-4.2-8b
+        llm-d.ai/engine-type: vllm
+        llm-d.ai/accelerator-variant: gpu
+        llm-d.ai/accelerator-vendor: nvidia
+    spec:
+      serviceAccountName: pd-disaggregation-hybrid-sa
+      nodeSelector:
+        kubernetes.io/hostname: p1-gpu-worker-1
+      containers:
+        - name: routing-proxy
+          image: image-registry.openshift-image-registry.svc:5000/llm-d-on-gpu/routing-sidecar:v0.8.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --port=8000
+            - --vllm-port=8200
+            - --kv-connector=nixlv2
+            - --zap-log-level=1
+            - --secure-proxy=false
+          ports:
+            - name: routing-proxy
+              containerPort: 8000
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 2
+            timeoutSeconds: 2
+            failureThreshold: 3
+        - name: modelserver
+          image: image-registry.openshift-image-registry.svc:5000/llm-d-on-gpu/vllm-gpu-nixl-latest:v21
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          command:
+            - /bin/bash
+            - -lc
+          args:
+            - |
+              # Patch base_worker.py to support remote DRAM memory type in heterogeneous setups
+              python3 -c '
+              import re
+              path = "/usr/local/lib/python3.12/dist-packages/vllm/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py"
+              with open(path) as f:
+                  content = f.read()
+
+              idx = content.find("def add_remote_agent")
+              if idx != -1:
+                  pre = content[:idx]
+                  post = content[idx:]
+                  post = re.sub(
+                      r"(# Register with NIXL\.\s*\n\s*)(?:remote_mem_type = .*?\n\s*)?descs = self\.nixl_wrapper\.get_xfer_descs\(blocks_data, .*?\)",
+                      r"\1remote_mem_type = '\''DRAM'\'' if (getattr(nixl_agent_meta, '\''attn_backend_name'\'', '\'''\'') == '\''SPYRE'\'' or nixl_agent_meta.device_id == 0) else self.nixl_memory_type\n        descs = self.nixl_wrapper.get_xfer_descs(blocks_data, remote_mem_type)",
+                      post,
+                      count=1
+                  )
+                  content = pre + post
+
+              content = content.replace(
+                  "if (meta := self._recving_metadata.get(req_id)) and not self._is_hma_required:\n            self._invalid_block_ids.put(set(meta.local_block_ids[0]))",
+                  "if (meta := self._recving_metadata.get(req_id)) and not self._is_hma_required and meta.local_block_ids:\n            self._invalid_block_ids.put(set(meta.local_block_ids[0]))"
+              )
+              with open(path, "w") as f:
+                  f.write(content)
+              print("Patched base_worker.py for heterogeneous DRAM/VRAM NIXL transfer")
+              '
+              vllm serve /model-cache/models/ibm-granite/granite-4.2-8b \
+                --served-model-name=granite-8b \
+                --disable-access-log-for-endpoints=/health,/metrics,/v1/models \
+                --tensor-parallel-size=1 \
+                --block-size=64 \
+                --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_connector_extra_config":{"enforce_handshake_compat":false}}' \
+                --no-disable-hybrid-kv-cache-manager \
+                --gpu-memory-utilization=0.9 \
+                --max-model-len=8192 \
+                --port=8200
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: llm-d-hf-token
+                  key: HF_TOKEN
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "GPU-e2dc1d73-d739-f82e-1606-2be6d92ebf2b"
+            - name: VLLM_NIXL_SIDE_CHANNEL_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: HOME
+              value: /tmp
+            - name: USER
+              value: vllm
+            - name: LOGNAME
+              value: vllm
+            - name: TORCHINDUCTOR_CACHE_DIR
+              value: /.cache/torchinductor
+            - name: TRITON_CACHE_DIR
+              value: /.triton
+            - name: XDG_CACHE_HOME
+              value: /.cache
+            - name: XDG_CONFIG_HOME
+              value: /.config
+            - name: VLLM_HTTP_TIMEOUT_KEEP_ALIVE
+              value: "120"
+          resources:
+            limits:
+              cpu: "8"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+            requests:
+              cpu: "8"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - mountPath: /model-cache
+              name: model-vol
+            - mountPath: /dev/shm
+              name: shm
+            - mountPath: /.cache
+              name: torch-compile-cache
+            - mountPath: /.config
+              name: vllm-config
+            - mountPath: /.triton
+              name: triton-cache
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8200
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 120
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8200
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8200
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+      volumes:
+        - name: model-vol
+          persistentVolumeClaim:
+            claimName: model-pvc
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 20Gi
+        - name: torch-compile-cache
+          emptyDir: {}
+        - name: vllm-config
+          emptyDir: {}
+        - name: triton-cache
+          emptyDir: {}

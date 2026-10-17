@@ -11,8 +11,8 @@ components:
 
 labels:
   - pairs:
-      llm-d.ai/model: Qwen3-32B
-      llm-d.ai/guide: pd-disaggregation
+      llm-d.ai/model: granite-4.2-8b
+      llm-d.ai/guide: pd-disaggregation-gpu
       llm-d.ai/accelerator-variant: gpu
       llm-d.ai/accelerator-vendor: nvidia
       llm-d.ai/engine-type: vllm

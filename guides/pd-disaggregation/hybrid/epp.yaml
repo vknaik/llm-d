@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pd-disaggregation-gpu-epp
+  namespace: llm-d-on-gpu
+  labels:
+    app.kubernetes.io/name: pd-disaggregation-gpu-epp
+    llm-d-router-gateway: pd-disaggregation-gpu-epp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      llm-d-router-gateway: pd-disaggregation-gpu-epp
+  template:
+    metadata:
+      labels:
+        llm-d-router-gateway: pd-disaggregation-gpu-epp
+    spec:
+      serviceAccountName: pd-disaggregation-gpu-epp
+      containers:
+      - name: epp
+        image: image-registry.openshift-image-registry.svc:5000/llm-d-on-gpu/endpoint-picker:main
+        imagePullPolicy: IfNotPresent
+        args:
+        - --pool-name
+        - pd-disaggregation-hybrid
+        - --pool-namespace
+        - llm-d-on-gpu
+        - --pool-group
+        - inference.networking.k8s.io
+        - --zap-encoder
+        - json
+        - --config-file
+        - /config/pd-config.yaml
+        - --grpc-health-port
+        - "9003"
+        - --v=2
+        - --tracing=false
+        ports:
+        - name: grpc
+          containerPort: 9002
+        - name: grpc-health
+          containerPort: 9003
+        - name: metrics
+          containerPort: 9090
+        resources:
+          requests:
+            cpu: "2"
+            memory: 4Gi
+          limits:
+            memory: 8Gi
+        livenessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          grpc:
+            port: 9003
+            service: inference-extension
+          periodSeconds: 2
+        volumeMounts:
+        - name: plugins-config-volume
+          mountPath: /config
+      volumes:
+      - name: plugins-config-volume
+        configMap:
+          name: pd-disaggregation-gpu-epp
