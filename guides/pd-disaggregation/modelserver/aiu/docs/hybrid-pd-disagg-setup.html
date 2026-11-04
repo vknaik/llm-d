@@ -1,0 +1,1671 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Heterogeneous Hybrid Disaggregated Prefill-Decode (PD) Setup and Deployment Guide</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+    html {
+      scroll-behavior: smooth;
+      color: #1f2328;
+      background-color: #ffffff;
+      font-size: 15px;
+    }
+    body {
+      font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 40px 36px 80px 36px;
+      word-wrap: break-word;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      color: #1f2328;
+      font-weight: 600;
+      margin-top: 1.8em;
+      margin-bottom: 0.6em;
+      line-height: 1.3;
+    }
+    h1 { font-size: 2.2em; border-bottom: 2px solid #d0d7de; padding-bottom: 0.3em; margin-top: 0; }
+    h2 { font-size: 1.6em; border-bottom: 1px solid #d0d7de; padding-bottom: 0.3em; }
+    h3 { font-size: 1.25em; }
+    h4 { font-size: 1.05em; }
+
+    a {
+      color: #0969da;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* Responsive scrollable table wrapper */
+    .table-wrapper {
+      overflow-x: auto;
+      max-width: 100%;
+      margin: 1.5em 0;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      background-color: #ffffff;
+      scrollbar-width: thin;
+      scrollbar-color: #8c959f #f6f8fa;
+    }
+    .table-wrapper::-webkit-scrollbar {
+      height: 9px;
+    }
+    .table-wrapper::-webkit-scrollbar-track {
+      background: #f6f8fa;
+      border-radius: 0 0 6px 6px;
+    }
+    .table-wrapper::-webkit-scrollbar-thumb {
+      background-color: #8c959f;
+      border-radius: 4px;
+      border: 2px solid #f6f8fa;
+    }
+    .table-wrapper::-webkit-scrollbar-thumb:hover {
+      background-color: #6e7781;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 600px;
+      margin: 0;
+      font-size: 0.92em;
+      display: table;
+    }
+    th, td {
+      border: 1px solid #d0d7de;
+      padding: 8px 12px;
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      overflow-wrap: break-word;
+      word-break: normal;
+    }
+    th {
+      background-color: #f6f8fa;
+      font-weight: 600;
+    }
+    tr:nth-child(even) {
+      background-color: #fbfcfd;
+    }
+    tr:hover {
+      background-color: #f3f4f6;
+    }
+
+    code {
+      font-family: "IBM Plex Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.88em;
+      background-color: rgba(175, 184, 193, 0.2);
+      padding: 0.2em 0.4em;
+      border-radius: 4px;
+    }
+    pre {
+      background-color: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      padding: 16px;
+      overflow-x: auto;
+      font-size: 0.9em;
+      line-height: 1.45;
+      scrollbar-width: thin;
+      scrollbar-color: #8c959f #f6f8fa;
+    }
+    pre::-webkit-scrollbar {
+      height: 8px;
+    }
+    pre::-webkit-scrollbar-track {
+      background: #f6f8fa;
+      border-radius: 4px;
+    }
+    pre::-webkit-scrollbar-thumb {
+      background-color: #8c959f;
+      border-radius: 4px;
+    }
+    pre code {
+      background-color: transparent;
+      padding: 0;
+      border-radius: 0;
+    }
+
+    blockquote {
+      margin: 1em 0;
+      padding: 0 1em;
+      color: #59636e;
+      border-left: 0.25em solid #d0d7de;
+    }
+
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #d0d7de;
+      border: 0;
+    }
+
+    ul, ol {
+      padding-left: 2em;
+      margin-bottom: 1em;
+    }
+    li + li {
+      margin-top: 0.25em;
+    }
+
+    .katex {
+      font-size: 1.05em;
+    }
+  </style>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      // Automatically wrap all markdown tables in responsive, scrollable container
+      document.querySelectorAll("table").forEach(function (table) {
+        if (!table.parentElement.classList.contains("table-wrapper")) {
+          var wrapper = document.createElement("div");
+          wrapper.className = "table-wrapper";
+          table.parentNode.insertBefore(wrapper, table);
+          wrapper.appendChild(table);
+        }
+      });
+    });
+  </script>
+  <script defer=""
+  src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function () {
+ var mathElements = document.getElementsByClassName("math");
+ var macros = [];
+ for (var i = 0; i < mathElements.length; i++) {
+  var texText = mathElements[i].firstChild;
+  if (mathElements[i].tagName == "SPAN") {
+   katex.render(texText.data, mathElements[i], {
+    displayMode: mathElements[i].classList.contains('display'),
+    throwOnError: false,
+    macros: macros,
+    fleqn: false
+   });
+}}});
+  </script>
+  <link rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Heterogeneous Hybrid Disaggregated Prefill-Decode (PD)
+Setup and Deployment Guide</h1>
+</header>
+<h1
+id="heterogeneous-hybrid-disaggregated-prefill-decode-pd-setup-and-deployment-guide">Heterogeneous
+Hybrid Disaggregated Prefill-Decode (PD) Setup and Deployment Guide</h1>
+<h2 id="ibm-spyre-aiu-prefill-nvidia-a100-gpu-decode">IBM Spyre AIU
+Prefill + NVIDIA A100 GPU Decode</h2>
+<h3
+id="platform-red-hat-openshift-container-platform-4.20.36-llm-d-nixl-1.5.0-vllm-0.28.0">Platform:
+Red Hat OpenShift Container Platform 4.20.36 + llm-d + NIXL 1.5.0 + vLLM
+0.28.0</h3>
+<p><strong>Date:</strong> October 30, 2026 (Updated from October 19,
+2026 baseline)<br />
+<strong>Cluster:</strong> <code>llm-d.spyre</code> (OpenShift 4.20.36) |
+Namespaces: <code>llm-d-on-aiu</code> &amp;
+<code>llm-d-on-gpu</code><br />
+<strong>Model:</strong> <code>ibm-granite/granite-4.2-8b</code> (served
+as <code>granite-8b</code>, bfloat16, 40 layers, GQA 8 KV heads)</p>
+<hr />
+<h2 id="key-heterogeneous-compatibility-requirements">1. Key
+Heterogeneous Compatibility Requirements</h2>
+<p>Deploying disaggregated Prefill-Decode (PD) inference across
+heterogeneous hardware platforms—pairing <strong>IBM Spyre AIU
+accelerators</strong> for prompt prefill with <strong>NVIDIA A100
+GPUs</strong> for autoregressive token generation—requires strict parity
+across model architecture, KV cache memory layout, NIXL serialization
+protocols, and transport network layers.</p>
+<h3 id="model-tensor-parameter-parity">1.1 Model &amp; Tensor Parameter
+Parity</h3>
+<p>Both the prefill engine on Spyre AIU and the decode engine on NVIDIA
+A100 must load identical weights and tokenizer configurations for
+<strong><code>ibm-granite/granite-4.2-8b</code></strong> (served as
+<code>granite-8b</code>): - <strong>Model Path:</strong>
+<code>/model-cache/models/ibm-granite/granite-4.2-8b</code> -
+<strong>Transformer Architecture:</strong> 40 hidden layers, hidden
+dimension 4096, 32 Query heads, 8 Key/Value heads (<span
+class="math inline">H_{kv} = 8</span>), head dimension 128 (<span
+class="math inline">D = 128</span>). - <strong>Data Type:</strong>
+<code>bfloat16</code> (<span class="math inline">2\text{ bytes}</span>
+per element).</p>
+<h3 id="block-size-alignment-block_size-64">1.2 Block Size Alignment
+(<code>block_size = 64</code>)</h3>
+<ul>
+<li><p><strong>IBM Spyre AIU:</strong> The underlying SENDNN device
+graph execution kernels and <code>SpyrePagedKVCache</code> enforce a
+native page size of <code>block_size = 64</code> tokens. <span
+class="math display">\text{Bytes per Block} = 40\text{ layers} \times
+2\,(\text{K, V}) \times 8\text{ heads} \times 64\text{ tokens} \times
+128\text{ head\_dim} \times 2\text{ bytes} = \mathbf{10.24\text{
+MB}}</span></p></li>
+<li><p><strong>NVIDIA A100 GPU:</strong> Standard vLLM default block
+size is often 16 or 128 tokens. To ensure exact tensor shape alignment
+and descriptor compatibility during NIXL memory registration and DMA
+ingestion, the GPU decode engine <strong>must</strong> be explicitly
+configured with:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">--block-size=64</span></span></code></pre></div></li>
+</ul>
+<h3
+id="nixl-compatibility-hash-override-enforce_handshake_compat-false">1.3
+NIXL Compatibility Hash Override
+(<code>enforce_handshake_compat: false</code>)</h3>
+<ul>
+<li><p>Upstream vLLM computes a cryptographic SHA-256 compatibility hash
+across runtime parameters, including <code>attn_backend_name</code>
+(<code>SPYRE</code> vs <code>FLASH_ATTN</code>), device execution
+backend (<code>cpu</code>/<code>spyre</code> vs <code>cuda</code>), and
+platform plugins.</p></li>
+<li><p>In a heterogeneous topology, this hash differs between platforms
+by design. To allow the GPU decode NIXL agent to successfully complete
+the metadata handshake with the Spyre prefill NIXL agent while retaining
+dynamic validation of layer count, head dimension, and byte layouts,
+both instances must set:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="er">&quot;kv_connector_extra_config&quot;:</span> <span class="fu">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;enforce_handshake_compat&quot;</span><span class="fu">:</span> <span class="kw">false</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div></li>
+</ul>
+<h3 id="cross-node-ucx-network-transport-configuration">1.4 Cross-Node
+UCX &amp; Network Transport Configuration</h3>
+<ul>
+<li><p>Prefill pods reside on worker nodes <code>p1-worker-63</code> or
+<code>p1-worker-69</code> (equipped with IBM Spyre PCIe AIUs), whereas
+Decode pods reside on <code>p1-gpu-worker-1</code> (equipped with NVIDIA
+A100-PCIE-80GB GPUs).</p></li>
+<li><p>NIXL transfers occur across physical nodes over the cluster
+network fabric using the <strong>Unified Communication X (UCX)</strong>
+transport layer.</p></li>
+<li><p>Both prefill and decode container environments require:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">env</span><span class="kw">:</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> UCX_NET_DEVICES</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;all&quot;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> UCX_TLS</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;tcp,sm,self&quot;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> VLLM_NIXL_SIDE_CHANNEL_HOST</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">valueFrom</span><span class="kw">:</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">fieldRef</span><span class="kw">:</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">fieldPath</span><span class="kw">:</span><span class="at"> status.podIP</span></span></code></pre></div></li>
+</ul>
+<hr />
+<h2 id="architecture-and-request-flow">2. Architecture and Request
+Flow</h2>
+<pre><code>                                  +------------------------------------+
+                                  |   Istio Gateway (Port 80)          |
+                                  |   172.30.116.228:80/hybrid/v1/...  |
+                                  +-----------------+------------------+
+                                                    | (Ext-Proc gRPC 9002)
+                                                    v
+                                  +------------------------------------+
+                                  |   EPP Router (Endpoint Picker)     |
+                                  |   pd-disaggregation-gpu-epp        |
+                                  |   Pool: pd-disaggregation-hybrid   |
+                                  +--------+------------------+--------+
+                                           |                  |
+                       1. Phase-1 Prefill  |                  | 2. Phase-2 Decode
+                       (Prompt Forward)    |                  | (KV Pull &amp; Token Loop)
+                                           v                  v
+                 +-------------------------------+    +----------------------------------+
+                 | Hybrid Prefill Pod            |    | Hybrid Decode Pod                |
+                 | Node: p1-worker-63            |    | Node: p1-gpu-worker-1            |
+                 | Accelerator: 1x Spyre AIU     |    | Accelerator: 1x A100 GPU (80GB)  |
+                 | - vLLM Engine (Port 8000)     |    | - Routing Sidecar (Port 8000)    |
+                 | - kv_role: kv_producer        |    | - vLLM Engine (Port 8200)        |
+                 | - SpyreNixlConnector          |    | - kv_role: kv_consumer / both    |
+                 | - block-size: 64              |    | - NixlConnector (block-size: 64) |
+                 +---------------+---------------+    +-----------------+----------------+
+                                 |                                      |
+                                 +====== Cross-Node NIXL / UCX TCP =====+
+                                      (Port 5557 / Host-to-Host Pull)</code></pre>
+<h3 id="request-lifecycle-steps">Request Lifecycle Steps:</h3>
+<ol type="1">
+<li><strong>Client Invocation:</strong> Client submits streaming or
+standard completion request to Gateway endpoint
+<code>http://172.30.116.228:80/hybrid/v1/completions</code>.</li>
+<li><strong>EPP Ext-Proc Scheduling:</strong> The Istio Gateway routes
+the request headers to the Endpoint Picker (EPP) service
+(<code>pd-disaggregation-gpu-epp:9002</code>). EPP evaluates load
+metrics across active prefill and decode pods in pool
+<code>pd-disaggregation-hybrid</code> and selects the target Decode
+instance.</li>
+<li><strong>Routing Sidecar Interception:</strong> The request is
+delivered to the Decode pod’s <code>routing-sidecar</code> on port
+<code>8000</code>. The sidecar extracts the prompt payload and forwards
+Phase-1 prefill dispatch to the Spyre Prefill pod on port
+<code>8000</code>.</li>
+<li><strong>Spyre AIU Prefill Execution:</strong>
+<ul>
+<li>The Spyre AIU executes the prompt forward pass (<span
+class="math inline">T_{\text{prompt}}</span>).</li>
+<li><code>SpyreNixlConnector</code> stages computed KV cache blocks into
+pinned host memory (<span
+class="math inline">T_{\text{d2h}}</span>).</li>
+<li>Side-channel metadata handshake passes NIXL block descriptors to the
+Decode worker.</li>
+</ul></li>
+<li><strong>NIXL Cross-Node Transfer &amp; Decode Ingestion:</strong>
+<ul>
+<li>The Decode engine initiates an asynchronous UCX memory pull over TCP
+across physical nodes (<span
+class="math inline">T_{\text{nixl}}</span>).</li>
+<li>Pinned staging memory is ingested into NVIDIA A100 GPU VRAM (<span
+class="math inline">T_{\text{h2d}}</span>).</li>
+</ul></li>
+<li><strong>Autoregressive Token Generation:</strong> The NVIDIA A100
+GPU generates tokens at native high-throughput speed (<span
+class="math inline">\sim 80\text{ tok/s}</span>) and streams responses
+back to the client.</li>
+</ol>
+<hr />
+<h2 id="configuration-wiring">3. Configuration Wiring</h2>
+<h3 id="kubernetes-label-schema">3.1 Kubernetes Label Schema</h3>
+<p>All components in this deployment belong to the dedicated guide
+identifier <strong><code>pd-disaggregation-hybrid</code></strong>:</p>
+<ul>
+<li><p><strong>Prefill Pod Labels (Spyre AIU):</strong></p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">labels</span><span class="kw">:</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">llm-d.ai/guide</span><span class="kw">:</span><span class="at"> pd-disaggregation-hybrid</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">llm-d.ai/role</span><span class="kw">:</span><span class="at"> prefill</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">llm-d.ai/model</span><span class="kw">:</span><span class="at"> granite-4.2-8b</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">llm-d.ai/engine-type</span><span class="kw">:</span><span class="at"> vllm</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">llm-d.ai/accelerator-variant</span><span class="kw">:</span><span class="at"> aiu</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">llm-d.ai/accelerator-vendor</span><span class="kw">:</span><span class="at"> ibm</span></span></code></pre></div></li>
+<li><p><strong>Decode Pod Labels (NVIDIA A100 GPU):</strong></p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">labels</span><span class="kw">:</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">llm-d.ai/guide</span><span class="kw">:</span><span class="at"> pd-disaggregation-hybrid</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">llm-d.ai/role</span><span class="kw">:</span><span class="at"> decode</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">llm-d.ai/model</span><span class="kw">:</span><span class="at"> granite-4.2-8b</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">llm-d.ai/engine-type</span><span class="kw">:</span><span class="at"> vllm</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">llm-d.ai/accelerator-variant</span><span class="kw">:</span><span class="at"> gpu</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">llm-d.ai/accelerator-vendor</span><span class="kw">:</span><span class="at"> nvidia</span></span></code></pre></div></li>
+</ul>
+<h3 id="inferencepool-httproute-manifests">3.2 InferencePool &amp;
+HTTPRoute Manifests</h3>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">apiVersion</span><span class="kw">:</span><span class="at"> inference.networking.k8s.io/v1</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">kind</span><span class="kw">:</span><span class="at"> InferencePool</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="fu">metadata</span><span class="kw">:</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">name</span><span class="kw">:</span><span class="at"> pd-disaggregation-hybrid</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">namespace</span><span class="kw">:</span><span class="at"> llm-d-on-gpu</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="fu">spec</span><span class="kw">:</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">appProtocol</span><span class="kw">:</span><span class="at"> http</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">endpointPickerRef</span><span class="kw">:</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">failureMode</span><span class="kw">:</span><span class="at"> FailOpen</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">group</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;&quot;</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">kind</span><span class="kw">:</span><span class="at"> Service</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">name</span><span class="kw">:</span><span class="at"> pd-disaggregation-gpu-epp</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">port</span><span class="kw">:</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">number</span><span class="kw">:</span><span class="at"> </span><span class="dv">9002</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">selector</span><span class="kw">:</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">matchLabels</span><span class="kw">:</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">llm-d.ai/guide</span><span class="kw">:</span><span class="at"> pd-disaggregation-hybrid</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">targetPorts</span><span class="kw">:</span></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">number</span><span class="kw">:</span><span class="at"> </span><span class="dv">8000</span></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a><span class="pp">---</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a><span class="fu">apiVersion</span><span class="kw">:</span><span class="at"> gateway.networking.k8s.io/v1</span></span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a><span class="fu">kind</span><span class="kw">:</span><span class="at"> HTTPRoute</span></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a><span class="fu">metadata</span><span class="kw">:</span></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">name</span><span class="kw">:</span><span class="at"> pd-disaggregation-hybrid</span></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">namespace</span><span class="kw">:</span><span class="at"> llm-d-on-gpu</span></span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a><span class="fu">spec</span><span class="kw">:</span></span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">parentRefs</span><span class="kw">:</span></span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">group</span><span class="kw">:</span><span class="at"> gateway.networking.k8s.io</span></span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">kind</span><span class="kw">:</span><span class="at"> Gateway</span></span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">name</span><span class="kw">:</span><span class="at"> llm-d-inference-gateway</span></span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">namespace</span><span class="kw">:</span><span class="at"> llm-d-on-aiu</span></span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">rules</span><span class="kw">:</span></span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">matches</span><span class="kw">:</span></span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> </span><span class="fu">path</span><span class="kw">:</span></span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">type</span><span class="kw">:</span><span class="at"> PathPrefix</span></span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">value</span><span class="kw">:</span><span class="at"> /hybrid</span></span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">filters</span><span class="kw">:</span></span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> </span><span class="fu">type</span><span class="kw">:</span><span class="at"> URLRewrite</span></span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">urlRewrite</span><span class="kw">:</span></span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">path</span><span class="kw">:</span></span>
+<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">type</span><span class="kw">:</span><span class="at"> ReplacePrefixMatch</span></span>
+<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">replacePrefixMatch</span><span class="kw">:</span><span class="at"> /</span></span>
+<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">backendRefs</span><span class="kw">:</span></span>
+<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> </span><span class="fu">group</span><span class="kw">:</span><span class="at"> inference.networking.k8s.io</span></span>
+<span id="cb7-45"><a href="#cb7-45" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">kind</span><span class="kw">:</span><span class="at"> InferencePool</span></span>
+<span id="cb7-46"><a href="#cb7-46" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">name</span><span class="kw">:</span><span class="at"> pd-disaggregation-hybrid</span></span>
+<span id="cb7-47"><a href="#cb7-47" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">weight</span><span class="kw">:</span><span class="at"> </span><span class="dv">1</span></span>
+<span id="cb7-48"><a href="#cb7-48" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">timeouts</span><span class="kw">:</span></span>
+<span id="cb7-49"><a href="#cb7-49" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">request</span><span class="kw">:</span><span class="at"> 0s</span></span></code></pre></div>
+<h3 id="epp-router-configuration">3.3 EPP Router Configuration</h3>
+<p>EPP is configured to target pool
+<code>pd-disaggregation-hybrid</code>:</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">containers</span><span class="kw">:</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> epp</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">image</span><span class="kw">:</span><span class="at"> image-registry.openshift-image-registry.svc:5000/llm-d-on-gpu/endpoint-picker:main</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">args</span><span class="kw">:</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> --pool-name</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> pd-disaggregation-hybrid</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> --pool-namespace</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> llm-d-on-gpu</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> --pool-group</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> inference.networking.k8s.io</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> --zap-encoder</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> json</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> --config-file</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> /config/pd-config.yaml</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> --grpc-health-port</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;9003&quot;</span></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> --v=2</span></span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> --tracing=false</span></span></code></pre></div>
+<hr />
+<h2 id="implementation-steps">4. Implementation Steps</h2>
+<h3 id="step-1-prepare-cache-storage-in-namespace-llm-d-on-gpu">Step 1:
+Prepare Cache Storage in Namespace <code>llm-d-on-gpu</code></h3>
+<p>Ensure the PVC <code>spyre-precompiled-model</code> exists in
+<code>llm-d-on-gpu</code> on <code>nfs-client-ess</code> to enable warm
+TorchInductor device graph caching for the Spyre prefill worker.</p>
+<h3
+id="step-2-deploy-spyre-aiu-prefill-pod-pd-disaggregation-hybrid-spyre-aiu-vllm-prefill">Step
+2: Deploy Spyre AIU Prefill Pod
+(<code>pd-disaggregation-hybrid-spyre-aiu-vllm-prefill</code>)</h3>
+<ul>
+<li>Pin to node <code>p1-worker-63</code> with resource request
+<code>ibm.com/spyre_pf: 1</code>.</li>
+<li>Container image:
+<code>image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl-latest:v21</code>.</li>
+<li>Set <code>--block-size=64</code>,
+<code>VLLM_PLUGINS=spyre_inference</code>, and connector
+<code>SpyreNixlConnector</code> with
+<code>enforce_handshake_compat: false</code>.</li>
+<li>Apply labels <code>llm-d.ai/guide: pd-disaggregation-hybrid</code>
+and <code>llm-d.ai/role: prefill</code>.</li>
+</ul>
+<h3
+id="step-3-deploy-nvidia-a100-gpu-decode-pod-pd-disaggregation-hybrid-nvidia-gpu-vllm-decode">Step
+3: Deploy NVIDIA A100 GPU Decode Pod
+(<code>pd-disaggregation-hybrid-nvidia-gpu-vllm-decode</code>)</h3>
+<ul>
+<li>Pin to node <code>p1-gpu-worker-1</code> on GPU 2
+(<code>GPU-e2dc1d73-d739-f82e-1606-2be6d92ebf2b</code> - 80GB).</li>
+<li>Container image:
+<code>image-registry.openshift-image-registry.svc:5000/llm-d-on-gpu/vllm-gpu-nixl-latest:v21</code>
+and <code>routing-sidecar:v0.8.0</code>.</li>
+<li>Update vLLM args to <code>--block-size=64</code>,
+<code>--port=8200</code>, and <code>NixlConnector</code> with
+<code>enforce_handshake_compat: false</code>.</li>
+<li>Apply labels <code>llm-d.ai/guide: pd-disaggregation-hybrid</code>
+and <code>llm-d.ai/role: decode</code>.</li>
+</ul>
+<h3 id="step-4-configure-inferencepool-httproute-and-epp">Step 4:
+Configure InferencePool, HTTPRoute, and EPP</h3>
+<ul>
+<li>Apply <code>InferencePool/pd-disaggregation-hybrid</code> and
+<code>HTTPRoute/pd-disaggregation-hybrid</code>.</li>
+<li>Restart or update EPP to track
+<code>--pool-name pd-disaggregation-hybrid</code>.</li>
+</ul>
+<h3 id="step-5-end-to-end-validation-telemetry-verification">Step 5:
+End-to-End Validation &amp; Telemetry Verification</h3>
+<ol type="1">
+<li>Verify both prefill and decode pods reach <code>Running</code> and
+<code>Ready</code> states.</li>
+<li>Verify EPP discovers both pods in pool
+<code>pd-disaggregation-hybrid</code>.</li>
+<li>Send test inference requests through
+<code>http://172.30.116.228:80/hybrid/v1/completions</code>.</li>
+<li>Inspect Decode pod modelserver logs to confirm:
+<ul>
+<li>Handshake compatibility bypass passed.</li>
+<li>Cross-node UCX NIXL pull completed successfully.</li>
+<li>Output tokens stream correctly back to the client.</li>
+</ul></li>
+</ol>
+<hr />
+<h2 id="codebase-modifications-for-heterogeneous-hybrid-pd">5. Codebase
+Modifications for Heterogeneous Hybrid PD</h2>
+<p>To enable cross-platform heterogeneous disaggregation between IBM
+Spyre AIU and upstream vLLM GPU without breaking homogeneous setups, key
+modifications were engineered into the Python connector stack and
+Kubernetes deployment manifests:</p>
+<h3 id="conditional-packed-hnd-staging-layout-in-spyre_connector.py">5.1
+Conditional Packed HND Staging Layout in
+<code>spyre_connector.py</code></h3>
+<p>Upstream vLLM FlashAttention on CUDA GPUs organizes KV caches with 1
+contiguous physical region per transformer layer packed in HND format
+(<code>[num_blocks, 2, num_kv_heads, block_size, head_size]</code>,
+length <span class="math inline">262,144\text{ bytes}</span> per block).
+Previously, the Spyre connector allocated separate <code>_k</code> and
+<code>_v</code> staging tensors per layer (80 regions total), causing
+<code>len(self.block_len_per_layer) != len(nixl_agent_meta.block_lens)</code>
+on the GPU consumer.</p>
+<p><code>spyre_connector.py</code> was refactored with conditional mode
+selection: - <strong>Packed HND Mode (Default,
+<code>SPYRE_NIXL_PACKED_KV=1</code> or
+<code>packed_kv: true</code>):</strong> Allocates 1 contiguous tensor
+per layer of shape
+<code>(num_blocks, 2, num_kv_heads, block_size, head_size)</code> (40
+regions total for Granite-8B, <span class="math inline">262,144\text{
+bytes}</span> per block). This matches upstream vLLM GPU/CPU/XPU and
+Spyre AIU layouts.
+<code>python   # Packed HND mode: 1 contiguous tensor per layer holding K and V   staging_shape = (num_blocks, 2) + page_shape  # (num_blocks, 2, heads, blk, dim)   staging_kv: dict[str, torch.Tensor] = {       ln: torch.zeros(staging_shape, dtype=page_dtype, device="cpu")       for ln in kv_caches   }</code>
+- <strong>Legacy Unpacked Mode (<code>SPYRE_NIXL_PACKED_KV=0</code> or
+<code>packed_kv: false</code>):</strong> Preserved for backward
+compatibility with older homogeneous Spyre deployments (2 staging
+tensors <code>_k</code> and <code>_v</code> per layer).</p>
+<h3 id="dynamic-mixin-worker-subclass-architecture">5.2 Dynamic Mixin
+Worker Subclass Architecture</h3>
+<p>Instead of overwriting upstream vLLM’s <code>base_worker.py</code>
+(which breaks across vLLM releases), <code>spyre_connector.py</code>
+introduces: - <code>_SpyreRegisterKVCachesMixin</code>: Intercepts only
+<code>register_kv_caches()</code> to manage CPU staging for
+<code>SpyrePagedKVCache</code>, delegating to <code>super()</code> for
+non-Spyre backends. -
+<code>SpyreNixlPullConnectorWorker(_SpyreRegisterKVCachesMixin, NixlPullConnectorWorker)</code>
+and <code>SpyreNixlPushConnectorWorker</code>: Directly inherit from
+upstream worker classes, satisfying upstream
+<code>isinstance(worker, NixlPullConnectorWorker)</code> type
+assertions.</p>
+<h3 id="kubernetes-deployment-manifests">5.3 Kubernetes Deployment
+Manifests</h3>
+<ul>
+<li><strong><a
+href="/home/vkn/llm-d/llm-d/guides/pd-disaggregation/hybrid/spyre-connector-cm.yaml"><code>spyre-connector-cm.yaml</code></a>:</strong>
+Encapsulates the complete <code>spyre_connector.py</code> module in a
+ConfigMap, mounted dynamically into the Prefill container at
+<code>/opt/patches/spyre_connector.py</code>.</li>
+<li><strong><a
+href="/home/vkn/llm-d/llm-d/guides/pd-disaggregation/hybrid/spyre-prefill.yaml"><code>spyre-prefill.yaml</code></a>:</strong>
+Deploys the Spyre prefill worker on <code>p1-worker-63</code>, mounting
+the ConfigMap and utilizing the warm NFS PVC cache
+(<code>spyre-precompiled-model</code>).</li>
+<li><strong><a
+href="/home/vkn/llm-d/llm-d/guides/pd-disaggregation/hybrid/gpu-decode.yaml"><code>gpu-decode.yaml</code></a>:</strong>
+Deploys the NVIDIA A100 decode worker on <code>p1-gpu-worker-1</code>,
+bundling the <code>routing-proxy</code> sidecar and applying runtime
+patches for heterogeneous memory descriptors.</li>
+<li><strong><a
+href="/home/vkn/llm-d/llm-d/guides/pd-disaggregation/hybrid/routing.yaml"><code>routing.yaml</code></a>:</strong>
+Defines <code>InferencePool/pd-disaggregation-hybrid</code> and
+<code>HTTPRoute/pd-disaggregation-hybrid</code> attached to gateway
+<code>llm-d-inference-gateway</code> with path prefix
+<code>/hybrid</code>.</li>
+<li><strong><a
+href="/home/vkn/llm-d/llm-d/guides/pd-disaggregation/hybrid/epp.yaml"><code>epp.yaml</code></a>:</strong>
+Deploys EPP router targeting pool
+<code>pd-disaggregation-hybrid</code>.</li>
+</ul>
+<hr />
+<h2
+id="scaling-to-dual-prefill-2p-spyre-1d-a100-quad-prefill-4p-spyre-1d-a100-and-generalized-n-p-m-d-cluster-topologies">6.
+Scaling to Dual-Prefill (2P-Spyre, 1D-A100), Quad-Prefill (4P-Spyre,
+1D-A100), and Generalized (n-P, m-D) Cluster Topologies</h2>
+<h3
+id="multi-prefill-deployment-configurations-2p-and-4p-architectures">6.1
+Multi-Prefill Deployment Configurations (2P and 4P Architectures)</h3>
+<p>Under high concurrency bursts (<span class="math inline">B \ge
+16</span>), single-prefill heterogeneous serving experiences queue
+serialization on the prefill accelerator. To scale prompt throughput
+linearly, the prefill deployment is scaled horizontally to <span
+class="math inline">P=2</span> or <span class="math inline">P=4</span>
+independent AIU replicas:</p>
+<pre><code>                                  +------------------------------------+
+                                  |   Istio Gateway (Port 80)          |
+                                  |   172.30.116.228:80/hybrid/v1/...  |
+                                  +-----------------+------------------+
+                                                    | (Ext-Proc gRPC 9002)
+                                                    v
+                                  +------------------------------------+
+                                  |   EPP Router (Endpoint Picker)     |
+                                  |   pd-disaggregation-gpu-epp        |
+                                  |   Token-Load Balancing Policy      |
+                                  +--------+------------------+--------+
+                                           |                  |
+                          Phase-1 Prefill  |                  | Phase-2 Decode
+                          Load-Balanced    |                  | Token Generation
+                                           |                  |
+                    +----------------------+                  v
+                    |                      |        +----------------------------------+
+                    v                      v        | Hybrid Decode Worker ($D_1$)     |
+     +--------------------------+ +--------------------------+ | Node: p1-gpu-worker-1            |
+     | Prefill Worker 1 ($P_1$) | | Prefill Worker 2 ($P_2$) | | Accelerator: NVIDIA A100 GPU     |
+     | Node: p1-worker-63       | | Node: p1-worker-63       | | - Routing Sidecar (Port 8000)    |
+     | Card: 0000:2f:00.0       | | Card: 0000:30:00.0       | | - vLLM Engine (Port 8200)        |
+     | Port: 8000 (kv_producer) | | Port: 8000 (kv_producer) | | - block-size: 64                 |
+     +------------+-------------+ +------------+-------------+ +-----------------+----------------+
+                  |                            |                                 |
+                  +=============+==============+                                 |
+                                |                                                |
+                                +=========== Cross-Node NIXL / UCX TCP ==========+
+                                      (Parallel Async Host-to-Host Pulls)</code></pre>
+<h4
+id="epp-configuration-for-multi-prefill-load-balancing-pd-config.yaml">EPP
+Configuration for Multi-Prefill Load Balancing
+(<code>pd-config.yaml</code>):</h4>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">apiVersion</span><span class="kw">:</span><span class="at"> llm-d.ai/v1alpha1</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="fu">kind</span><span class="kw">:</span><span class="at"> EndpointPickerConfig</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="fu">plugins</span><span class="kw">:</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="kw">-</span><span class="at"> </span><span class="fu">type</span><span class="kw">:</span><span class="at"> always-disagg-pd-decider</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="kw">-</span><span class="at"> </span><span class="fu">type</span><span class="kw">:</span><span class="at"> disagg-profile-handler</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">parameters</span><span class="kw">:</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">deciders</span><span class="kw">:</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">prefill</span><span class="kw">:</span><span class="at"> always-disagg-pd-decider</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="kw">-</span><span class="at"> </span><span class="fu">type</span><span class="kw">:</span><span class="at"> prefill-filter</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="kw">-</span><span class="at"> </span><span class="fu">type</span><span class="kw">:</span><span class="at"> decode-filter</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="kw">-</span><span class="at"> </span><span class="fu">type</span><span class="kw">:</span><span class="at"> approx-prefix-cache-producer</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">parameters</span><span class="kw">:</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">maxPrefixTokensToMatch</span><span class="kw">:</span><span class="at"> </span><span class="dv">131072</span></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a><span class="kw">-</span><span class="at"> </span><span class="fu">type</span><span class="kw">:</span><span class="at"> inflight-load-producer</span></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a><span class="kw">-</span><span class="at"> </span><span class="fu">type</span><span class="kw">:</span><span class="at"> token-load-scorer</span></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a><span class="kw">-</span><span class="at"> </span><span class="fu">type</span><span class="kw">:</span><span class="at"> active-request-scorer</span></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a><span class="kw">-</span><span class="at"> </span><span class="fu">type</span><span class="kw">:</span><span class="at"> max-score-picker</span></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a><span class="fu">schedulingProfiles</span><span class="kw">:</span></span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> prefill</span></span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">plugins</span><span class="kw">:</span></span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">pluginRef</span><span class="kw">:</span><span class="at"> prefill-filter</span></span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">pluginRef</span><span class="kw">:</span><span class="at"> token-load-scorer</span></span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">pluginRef</span><span class="kw">:</span><span class="at"> max-score-picker</span></span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> decode</span></span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">plugins</span><span class="kw">:</span></span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">pluginRef</span><span class="kw">:</span><span class="at"> decode-filter</span></span>
+<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">pluginRef</span><span class="kw">:</span><span class="at"> active-request-scorer</span></span>
+<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">pluginRef</span><span class="kw">:</span><span class="at"> max-score-picker</span></span></code></pre></div>
+<hr />
+<h3 id="generalized-ntext-p-mtext-d-sizing-capacity-planning">6.2
+Generalized <span class="math inline">(n\text{-P}, m\text{-D})</span>
+Sizing &amp; Capacity Planning</h3>
+<p>To architect arbitrary <span class="math inline">(n\text{-P},
+m\text{-D})</span> heterogeneous serving clusters, sizing must account
+for two distinct operating regimes: <strong>Steady-State Throughput
+Balancing</strong> and <strong>Burst Concurrency Latency
+Bounds</strong>.</p>
+<h4 id="steady-state-capacity-ratio">1. Steady-State Capacity
+Ratio:</h4>
+<p>Let: - <span class="math inline">L_p</span>: Average prompt length
+(tokens) - <span class="math inline">L_d</span>: Average output
+generation length (tokens) - <span
+class="math inline">T_{\text{step},p}</span>: Prefill time per token on
+Spyre AIU (<span class="math inline">\approx 0.90\text{ ms/tok}</span>
+for Granite-8B) - <span class="math inline">T_{\text{step},d}</span>:
+Decode step time per token on A100 GPU (<span
+class="math inline">\approx 12.52\text{ ms/tok}</span>)</p>
+<p>The total execution time spent per request on each tier is: <span
+class="math display">T_p = L_p \times T_{\text{step},p} = 128 \times
+0.90\text{ ms} = 115.6\text{ ms}</span> <span class="math display">T_d =
+L_d \times T_{\text{step},d} = 200 \times 12.52\text{ ms} = 2504\text{
+ms}</span></p>
+<p>The theoretical balanced service ratio <span
+class="math inline">R_\text{steady} = \frac{n}{m}</span> is: <span
+class="math display">R_\text{steady} = \frac{T_p}{T_d} =
+\frac{115.6\text{ ms}}{2504\text{ ms}} \approx \mathbf{0.046} \implies
+1\text{ Spyre Prefill Worker can feed } \approx 21.6\text{ single-stream
+GPU Decoders in continuous steady-state.}</span></p>
+<p>When the GPU decoder runs with batch size <span
+class="math inline">B=16</span> (GEMV step time <span
+class="math inline">\approx 15.5\text{ ms}</span>, total batch decode
+time <span class="math inline">\approx 3.1\text{ s}</span> for 16
+streams), the GPU requires <span class="math inline">\frac{16}{3.1\text{
+s}} \approx 5.16\text{ req/s}</span>. A single Spyre AIU prefill card
+delivers <span class="math inline">\frac{1}{0.1156\text{ s}} \approx
+8.65\text{ req/s}</span>, which fully satisfies the steady-state demand
+of <span class="math inline">1.67</span> saturated A100 GPUs.</p>
+<h4 id="burst-concurrency-dimensioning-b-simultaneous-arrivals">2. Burst
+Concurrency Dimensioning (<span class="math inline">B</span>
+simultaneous arrivals):</h4>
+<p>In interactive chat and agentic workflows, requests arrive in sudden
+concurrent bursts of size <span class="math inline">B</span>. To
+guarantee an upper bound on client TTFT (<span
+class="math inline">T_\text{TTFT\_max}</span>), the number of prefill
+workers <span class="math inline">n</span> is dimensioned by: <span
+class="math display">T_\text{prefill\_queue} = \left\lceil \frac{B}{n}
+\right\rceil \times T_p \le T_\text{TTFT\_target} - T_\text{nixl} -
+T_\text{step1}</span></p>
+<p>For <span class="math inline">B=16</span>, <span
+class="math inline">T_p = 115.6\text{ ms}</span>, targeting <span
+class="math inline">T_\text{TTFT} \le 1.0\text{ s}</span>: <span
+class="math display">n \ge \frac{16 \times 0.1156\text{ s}}{0.90\text{
+s}} = 2.05 \implies \mathbf{n = 2\text{ to } 3\text{ Spyre Prefill
+Workers}}</span></p>
+<h4 id="summary-sizing-matrix">3. Summary Sizing Matrix:</h4>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 12%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Cluster Topology</th>
+<th style="text-align: left;">Prefill Hardware</th>
+<th style="text-align: left;">Decode Hardware</th>
+<th style="text-align: center;">CapEx Footprint</th>
+<th style="text-align: center;">Total TDP</th>
+<th style="text-align: center;">Max Burst Concurrency (<span
+class="math inline">B</span>)</th>
+<th style="text-align: left;">Target Workload SLA</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><strong>(1P, 1D) Hybrid</strong></td>
+<td style="text-align: left;">1x Spyre AIU</td>
+<td style="text-align: left;">1x A100 GPU (80GB)</td>
+<td style="text-align: center;"><span class="math inline">\approx
+\$19.5\text{k}</span></td>
+<td style="text-align: center;"><span
+class="math inline">350\text{W}</span></td>
+<td style="text-align: center;"><span class="math inline">B \le
+4</span></td>
+<td style="text-align: left;">Low concurrency, long generation (<span
+class="math inline">L_d \gg L_p</span>)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>(2P, 1D) Hybrid</strong></td>
+<td style="text-align: left;">2x Spyre AIU</td>
+<td style="text-align: left;">1x A100 GPU (80GB)</td>
+<td style="text-align: center;"><span class="math inline">\approx
+\$23.0\text{k}</span></td>
+<td style="text-align: center;"><span
+class="math inline">425\text{W}</span></td>
+<td style="text-align: center;"><span class="math inline">B \le
+16</span></td>
+<td style="text-align: left;">Standard enterprise concurrency (<span
+class="math inline">B=16</span>), balanced SLA</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>(4P, 1D) Hybrid</strong></td>
+<td style="text-align: left;">4x Spyre AIU</td>
+<td style="text-align: left;">1x A100 GPU (80GB)</td>
+<td style="text-align: center;"><span class="math inline">\approx
+\$30.0\text{k}</span></td>
+<td style="text-align: center;"><span
+class="math inline">575\text{W}</span></td>
+<td style="text-align: center;"><span class="math inline">B \le
+32</span></td>
+<td style="text-align: left;">High burst concurrency, short context
+prefill SLA (<span class="math inline">&lt; 1\text{s}</span> TTFT)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>(4P, 2D) Hybrid</strong></td>
+<td style="text-align: left;">4x Spyre AIU</td>
+<td style="text-align: left;">2x A100 GPU (80GB)</td>
+<td style="text-align: center;"><span class="math inline">\approx
+\$46.0\text{k}</span></td>
+<td style="text-align: center;"><span
+class="math inline">850\text{W}</span></td>
+<td style="text-align: center;"><span class="math inline">B \le
+64</span></td>
+<td style="text-align: left;">High-throughput production serving (<span
+class="math inline">&gt; 1500\text{ tok/s}</span>)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="performance-verification-comprehensive-benchmark-results">7.
+Performance Verification &amp; Comprehensive Benchmark Results</h2>
+<h3 id="single-prefill-1p1d-baseline-results-granite-4.2-8b">7.1
+Single-Prefill (1P1D) Baseline Results (Granite-4.2-8B)</h3>
+<table>
+<colgroup>
+<col style="width: 22%" />
+<col style="width: 27%" />
+<col style="width: 27%" />
+<col style="width: 22%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Metric</th>
+<th style="text-align: center;">max_tokens = 50 (5 runs)</th>
+<th style="text-align: center;">max_tokens = 200 (5 runs)</th>
+<th style="text-align: left;">Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><strong>Mean TTFT</strong></td>
+<td style="text-align: center;"><strong><span
+class="math inline">0.206\text{ s}</span></strong> (<span
+class="math inline">\pm 0.014\text{ s}</span>)</td>
+<td style="text-align: center;"><strong><span
+class="math inline">0.207\text{ s}</span></strong> (<span
+class="math inline">\pm 0.010\text{ s}</span>)</td>
+<td style="text-align: left;">Instantaneous prompt processing on Spyre
+AIU</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Mean Total Time</strong></td>
+<td style="text-align: center;"><span class="math inline">0.819\text{
+s}</span> (<span class="math inline">\pm 0.015\text{ s}</span>)</td>
+<td style="text-align: center;"><span class="math inline">2.694\text{
+s}</span> (<span class="math inline">\pm 0.011\text{ s}</span>)</td>
+<td style="text-align: left;">200 tokens generated in <span
+class="math inline">&lt; 2.7\text{ s}</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>Decode Throughput
+(post-TTFT)</strong></td>
+<td style="text-align: center;"><strong><span
+class="math inline">79.94\text{ tok/s}</span></strong></td>
+<td style="text-align: center;"><strong><span
+class="math inline">79.99\text{ tok/s}</span></strong></td>
+<td style="text-align: left;">Native A100 GPU token generation
+speed</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Total Throughput</strong></td>
+<td style="text-align: center;"><span class="math inline">61.09\text{
+tok/s}</span></td>
+<td style="text-align: center;"><strong><span
+class="math inline">74.23\text{ tok/s}</span></strong></td>
+<td style="text-align: left;">Scales toward decode speed as sequence
+grows</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="full-20-configuration-concurrency-batch-scaling-matrix-m200">7.2
+Full 20-Configuration Concurrency Batch Scaling Matrix (<span
+class="math inline">M=200</span>)</h3>
+<p>All 20 configurations were evaluated with <strong>10 independent
+iterations per setting</strong> (200 streaming requests total) serving
+<code>ibm-granite/granite-4.2-8b</code>:</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 10%" />
+<col style="width: 10%" />
+<col style="width: 10%" />
+<col style="width: 10%" />
+<col style="width: 10%" />
+<col style="width: 10%" />
+<col style="width: 10%" />
+<col style="width: 10%" />
+<col style="width: 10%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: center;">Prompt Length</th>
+<th style="text-align: center;">Concurrency (<span
+class="math inline">B</span>)</th>
+<th style="text-align: center;">1P-Spyre Hybrid Agg tok/s</th>
+<th style="text-align: center;">2P-Spyre Hybrid Agg tok/s</th>
+<th style="text-align: center;">4P-Spyre Hybrid Agg tok/s</th>
+<th style="text-align: center;">Throughput Gain (4P vs 1P)</th>
+<th style="text-align: center;">1P-Spyre TTFT (s)</th>
+<th style="text-align: center;">2P-Spyre TTFT (s)</th>
+<th style="text-align: center;">4P-Spyre TTFT (s)</th>
+<th style="text-align: center;">TTFT Reduction (4P vs 1P)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: center;"><strong>16</strong></td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"><span class="math inline">74.28\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">74.13\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">74.22\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span
+class="math inline">-0.1\%</span></td>
+<td style="text-align: center;"><span class="math inline">0.199\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.198\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.198\text{
+s}</span></td>
+<td style="text-align: center;"><span
+class="math inline">0.0\%</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><strong>16</strong></td>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;"><span class="math inline">141.50\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">142.16\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">141.01\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span
+class="math inline">-0.3\%</span></td>
+<td style="text-align: center;"><span class="math inline">0.276\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.262\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.273\text{
+s}</span></td>
+<td style="text-align: center;"><span
+class="math inline">-1.1\%</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><strong>16</strong></td>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;"><span class="math inline">228.40\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">251.87\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">251.35\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span
+class="math inline">+10.0\%</span></td>
+<td style="text-align: center;"><span class="math inline">0.462\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.419\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.420\text{
+s}</span></td>
+<td style="text-align: center;"><span
+class="math inline">-9.1\%</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><strong>16</strong></td>
+<td style="text-align: center;">8</td>
+<td style="text-align: center;"><span class="math inline">302.10\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">425.05\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">427.56\text{
+tok/s}</span></td>
+<td style="text-align: center;"><strong><span
+class="math inline">+41.5\%</span></strong></td>
+<td style="text-align: center;"><span class="math inline">1.120\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.665\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.660\text{
+s}</span></td>
+<td style="text-align: center;"><strong><span
+class="math inline">-41.1\%</span></strong></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><strong>16</strong></td>
+<td style="text-align: center;">16</td>
+<td style="text-align: center;"><span class="math inline">327.30\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">608.03\text{
+tok/s}</span></td>
+<td style="text-align: center;"><strong><span
+class="math inline">621.52\text{ tok/s}</span></strong></td>
+<td style="text-align: center;"><strong><span
+class="math inline">+89.9\%</span></strong> 🚀</td>
+<td style="text-align: center;"><span class="math inline">2.450\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">1.355\text{
+s}</span></td>
+<td style="text-align: center;"><strong><span
+class="math inline">0.957\text{ s}</span></strong></td>
+<td style="text-align: center;"><strong><span
+class="math inline">-60.9\%</span></strong> ⚡</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><strong>128</strong></td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"><span class="math inline">71.44\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">71.34\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">71.34\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span
+class="math inline">-0.1\%</span></td>
+<td style="text-align: center;"><span class="math inline">0.298\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.295\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.295\text{
+s}</span></td>
+<td style="text-align: center;"><span
+class="math inline">-1.0\%</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><strong>128</strong></td>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;"><span class="math inline">124.80\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">129.59\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">130.45\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span
+class="math inline">+4.5\%</span></td>
+<td style="text-align: center;"><span class="math inline">0.512\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.442\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.438\text{
+s}</span></td>
+<td style="text-align: center;"><span
+class="math inline">-14.5\%</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><strong>128</strong></td>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;"><span class="math inline">182.30\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">219.42\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">223.10\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span
+class="math inline">+22.4\%</span></td>
+<td style="text-align: center;"><span class="math inline">1.150\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.721\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">0.695\text{
+s}</span></td>
+<td style="text-align: center;"><span
+class="math inline">-39.6\%</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><strong>128</strong></td>
+<td style="text-align: center;">8</td>
+<td style="text-align: center;"><span class="math inline">221.70\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">338.48\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">348.90\text{
+tok/s}</span></td>
+<td style="text-align: center;"><strong><span
+class="math inline">+57.4\%</span></strong></td>
+<td style="text-align: center;"><span class="math inline">2.310\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">1.253\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">1.120\text{
+s}</span></td>
+<td style="text-align: center;"><strong><span
+class="math inline">-51.5\%</span></strong></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><strong>128</strong></td>
+<td style="text-align: center;">16</td>
+<td style="text-align: center;"><span class="math inline">235.90\text{
+tok/s}</span></td>
+<td style="text-align: center;"><span class="math inline">465.66\text{
+tok/s}</span></td>
+<td style="text-align: center;"><strong><span
+class="math inline">510.15\text{ tok/s}</span></strong></td>
+<td style="text-align: center;"><strong><span
+class="math inline">+116.3\%</span></strong> 🚀</td>
+<td style="text-align: center;"><span class="math inline">4.410\text{
+s}</span></td>
+<td style="text-align: center;"><span class="math inline">2.324\text{
+s}</span></td>
+<td style="text-align: center;"><strong><span
+class="math inline">1.450\text{ s}</span></strong></td>
+<td style="text-align: center;"><strong><span
+class="math inline">-67.1\%</span></strong> ⚡</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3
+id="high-concurrency-b128-long-context-m4096-poisson-traffic-and-prefix-caching">7.3
+High Concurrency (<span class="math inline">B=128</span>), Long Context
+(<span class="math inline">M=4096</span>), Poisson Traffic, and Prefix
+Caching</h3>
+<ol type="1">
+<li><strong>Peak Burst Throughput (<span class="math inline">B=128,
+M=1024</span>):</strong>
+<ul>
+<li><strong>4P-Hybrid</strong> achieves <strong><span
+class="math inline">3748.09 \pm 73.12\text{ tok/s}</span></strong>
+(<strong><span class="math inline">90.0\%</span></strong> of pure 2-GPU
+baseline <span class="math inline">4164.59\text{ tok/s}</span>) with
+<span class="math inline">50\%</span> fewer GPUs.</li>
+</ul></li>
+<li><strong>Long Generation Parity (<span class="math inline">M=4096,
+B=128</span>):</strong>
+<ul>
+<li><strong>4P-Hybrid</strong> achieves <strong><span
+class="math inline">2812.79 \pm 31.31\text{ tok/s}</span></strong>
+(<strong><span class="math inline">97.2\%</span></strong> of pure GPU
+baseline <span class="math inline">2893.58\text{ tok/s}</span>).</li>
+</ul></li>
+<li><strong>Continuous Poisson Arrival Traffic (<span
+class="math inline">\lambda = 20\text{ req/s}</span>):</strong>
+<ul>
+<li><strong>4P-Hybrid</strong> maintains <strong><span
+class="math inline">1501.33 \pm 57.86\text{ tok/s}</span></strong> with
+median TTFT of <strong><span class="math inline">1.180\text{
+s}</span></strong> and p90 TTFT of <strong><span
+class="math inline">2.179\text{ s}</span></strong> (a <strong><span
+class="math inline">-66.8\%</span> tail latency reduction</strong> over
+2P-Hybrid).</li>
+</ul></li>
+<li><strong>Multi-Turn Conversational Prefix Caching (<span
+class="math inline">P_{\text{sys}} = 1024</span>):</strong>
+<ul>
+<li>Enables an <strong><span
+class="math inline">8.6\%\text{--}9.6\%</span></strong> TTFT reduction
+across 5-turn conversational dialogues while maintaining invariant
+decode speeds (<span class="math inline">\approx 80\text{
+tok/s}</span>).</li>
+</ul></li>
+</ol>
+<hr />
+<h3 id="performance-measurement-benchmark-scripts">7.4 Performance
+Measurement &amp; Benchmark Scripts</h3>
+<p>All benchmarking experiments, latency profiling, and micro-benchmarks
+are automated through dedicated Python scripts located in
+<code>~/llm-d/llm-d/guides/pd-disaggregation/modelserver/aiu/vllm/scripts/</code>
+(and subdirectory <code>hybrid/</code>):</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Script Name</th>
+<th style="text-align: left;">Path</th>
+<th style="text-align: left;">Description &amp; Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td
+style="text-align: left;"><strong><code>stream_timing.py</code></strong></td>
+<td style="text-align: left;"><code>scripts/stream_timing.py</code></td>
+<td style="text-align: left;">Single-stream streaming latency harness.
+Measures microsecond-resolution TTFT, total request wall time, total
+throughput (tok/s), and post-TTFT decode rate (tok/s) across <span
+class="math inline">N</span> sequential
+iterations.<br><code>python3 stream_timing.py &lt;ENDPOINT_URL&gt; &lt;N_RUNS&gt; &lt;MAX_TOKENS&gt;</code></td>
+</tr>
+<tr class="even">
+<td
+style="text-align: left;"><strong><code>batch_stream_timing.py</code></strong></td>
+<td
+style="text-align: left;"><code>scripts/batch_stream_timing.py</code></td>
+<td style="text-align: left;">Multi-threaded concurrent batch streaming
+benchmark. Launches concurrent client threads (<span
+class="math inline">B \in \{1, 2, 4, 8, 16, 32, 64, 128\}</span>) over
+<span class="math inline">N</span> iterations, computing aggregate
+throughput, per-stream generation rate, and TTFT distribution (<span
+class="math inline">\mu \pm
+\sigma</span>).<br><code>python3 batch_stream_timing.py &lt;ENDPOINT_URL&gt; &lt;BATCH_SIZE&gt; &lt;N_RUNS&gt; &lt;MAX_TOKENS&gt;</code></td>
+</tr>
+<tr class="odd">
+<td
+style="text-align: left;"><strong><code>measure_granular_ttft.py</code></strong></td>
+<td
+style="text-align: left;"><code>scripts/measure_granular_ttft.py</code></td>
+<td style="text-align: left;">Granular 7-stage latency breakdown
+harness. Measures stage-by-stage timings (<span
+class="math inline">T_{\text{prompt}}</span>, <span
+class="math inline">T_{\text{d2h}}</span>, <span
+class="math inline">T_{\text{meta}}</span>, <span
+class="math inline">T_{\text{nixl}}</span>, <span
+class="math inline">T_{\text{h2d}}</span>, <span
+class="math inline">T_{\text{sync}}</span>, <span
+class="math inline">T_{\text{step1}}</span>) across prompt sizes (16 and
+128 tokens) on Spyre AIU, NVIDIA GPU, and Hybrid setups.</td>
+</tr>
+<tr class="even">
+<td
+style="text-align: left;"><strong><code>profile_kv_ops.py</code></strong></td>
+<td
+style="text-align: left;"><code>scripts/profile_kv_ops.py</code></td>
+<td style="text-align: left;">Micro-benchmarks low-level memory
+operations: Device-to-Host (D2H) copy from accelerator DRAM to pinned
+CPU host memory, Host-to-Device (H2D) copy to device memory, and NIXL
+DMA bandwidth across 1, 2, 4, and 8 blocks (<span
+class="math inline">10.24\text{ MB}</span> to <span
+class="math inline">81.92\text{ MB}</span>).</td>
+</tr>
+<tr class="odd">
+<td
+style="text-align: left;"><strong><code>profile_nixl_mapping.py</code></strong></td>
+<td
+style="text-align: left;"><code>scripts/profile_nixl_mapping.py</code></td>
+<td style="text-align: left;">Microsecond profiling of NIXL metadata
+creation, side-channel handshake latency, TP rank offset mapping, and
+descriptor calculation (<code>get_xfer_descs</code>).</td>
+</tr>
+<tr class="even">
+<td
+style="text-align: left;"><strong><code>run_hybrid_exp1_scaling.py</code></strong></td>
+<td
+style="text-align: left;"><code>scripts/hybrid/run_hybrid_exp1_scaling.py</code></td>
+<td style="text-align: left;">Automated high-concurrency scaling runner.
+Evaluates the 6-point scaling grid (<span class="math inline">B \in
+\{16, 64, 128\}</span> and <span class="math inline">M \in \{1024,
+4096\}</span>) across 10 iterations per setting.</td>
+</tr>
+<tr class="odd">
+<td
+style="text-align: left;"><strong><code>run_hybrid_poisson_exp2.py</code></strong></td>
+<td
+style="text-align: left;"><code>scripts/hybrid/run_hybrid_poisson_exp2.py</code></td>
+<td style="text-align: left;">Continuous open-loop Poisson arrival
+traffic generator (<span class="math inline">\lambda = 5, 10, 20\text{
+req/s}</span>) evaluating sustained throughput, queue saturation, and
+tail latency (p50, p90, p99 TTFT).</td>
+</tr>
+<tr class="even">
+<td
+style="text-align: left;"><strong><code>run_hybrid_prefix_caching_exp3.py</code></strong></td>
+<td
+style="text-align: left;"><code>scripts/hybrid/run_hybrid_prefix_caching_exp3.py</code></td>
+<td style="text-align: left;">Multi-turn conversational session
+benchmark (5 turns, shared system prompt <span
+class="math inline">P_{\text{sys}} = 1024</span>) measuring prefix cache
+hit rates, TTFT speedup, and token generation stability.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="challenges-encountered-technical-solutions-applied">8.
+Challenges Encountered &amp; Technical Solutions Applied</h2>
+<p>During the initial deployment and end-to-end integration of the
+hybrid PD system, several significant low-level runtime challenges were
+identified and systematically resolved:</p>
+<pre><code>+---------------------------------------------------------------------------------------------------------+
+|                                    HYBRID INTEGRATION CHALLENGES &amp; FIXES                                |
++------------------------------------+------------------------------------+-------------------------------+
+| Challenge                          | Root Cause                         | Resolution                    |
++------------------------------------+------------------------------------+-------------------------------+
+| 1. Decode Engine Handshake Crash   | Invalid guard check                | Dynamically detect Spyre/CPU  |
+|    (NIXL_ERR_NOT_FOUND on VRAM)    | (nixl_memory_type == &#39;CUDA&#39; False) | DRAM remote memory type       |
++------------------------------------+------------------------------------+-------------------------------+
+| 2. Local Handler Scoping Breakage  | Global replace overwritten local   | Surgically scope patch inside |
+|    (NameError on nixl_agent_meta)  | register_local_xfer_handler        | def add_remote_agent only     |
++------------------------------------+------------------------------------+-------------------------------+
+| 3. Upstream Exception Masking      | Unconditional access to            | Guard with                    |
+|    (IndexError on local_block_ids) | empty meta.local_block_ids[0]      | if meta.local_block_ids:      |
++------------------------------------+------------------------------------+-------------------------------+
+| 4. Subclass `isinstance` Crash     | Class hot-swap broke upstream type | Implemented mixin + explicit  |
+|    (AssertionError on PullWorker)  | check in `start_load_kv()`         | `NixlPullConnectorWorker` sub |
++------------------------------------+------------------------------------+-------------------------------+
+| 5. Hardware RAS Bus Fence Fault    | Faulty Spyre card (0000:41:00.0)   | Deployed dedicated blocker    |
+|    (BusFence 0xa35e on warmup)     | on worker node p1-worker-63        | pod holding faulty card PCI   |
++------------------------------------+------------------------------------+-------------------------------+</code></pre>
+<hr />
+<h3
+id="challenge-1-decode-engine-crash-via-memory-type-mismatch-nixl_err_not_found-vram_seg">8.1
+Challenge 1: Decode Engine Crash via Memory Type Mismatch
+(<code>NIXL_ERR_NOT_FOUND</code> / <code>VRAM_SEG</code>)</h3>
+<h4 id="phenomenon">Phenomenon:</h4>
+<p>When sending the first inference request through the Istio Gateway,
+the decode modelserver crashed during the NIXL handshake
+(<code>_nixl_handshake</code>) with:</p>
+<pre><code>File &quot;.../vllm/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py&quot;, line 1704, in add_remote_agent
+    self.nixl_wrapper.prep_xfer_dlist(remote_agent_name, descs)
+File &quot;.../nixl_cu13/_api.py&quot;, line 544, in prep_xfer_dlist
+    handle = self.agent.prepXferDlist(agent_name, descs, handle_list)
+nixl_cu13._bindings.nixlNotFoundError: NIXL_ERR_NOT_FOUND</code></pre>
+<p>Underlying NIXL C++ logging revealed:</p>
+<pre><code>E1016 22:32:40 nixl_agent.cpp:625] prepXferDlist: no available backends for mem type &#39;VRAM_SEG&#39;
+E1016 22:32:40 nixl_agent.cpp:657] prepXferDlist: failed to prepare descriptors for agent &#39;prefill_agent&#39;</code></pre>
+<h4 id="root-cause">Root Cause:</h4>
+<p>In upstream vLLM’s <code>base_worker.py</code>, the memory type used
+when preparing transfer descriptors for a remote agent was computed
+as:</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Upstream base_worker.py (Buggy):</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>remote_mem_type <span class="op">=</span> <span class="st">&quot;DRAM&quot;</span> <span class="cf">if</span> (<span class="bu">getattr</span>(nixl_agent_meta, <span class="st">&quot;attn_backend_name&quot;</span>, <span class="st">&quot;&quot;</span>) <span class="op">==</span> <span class="st">&quot;SPYRE&quot;</span> <span class="kw">or</span> nixl_agent_meta.device_id <span class="op">==</span> <span class="dv">0</span>) <span class="kw">and</span> <span class="va">self</span>.nixl_memory_type <span class="op">==</span> <span class="st">&quot;CUDA&quot;</span> <span class="cf">else</span> <span class="va">self</span>.nixl_memory_type</span></code></pre></div>
+<p>Because GPU vLLM initializes
+<code>self.nixl_memory_type = "VRAM"</code> (not <code>"CUDA"</code>),
+the expression <code>self.nixl_memory_type == "CUDA"</code> evaluated to
+<code>False</code>. As a result, <code>remote_mem_type</code> remained
+<code>"VRAM"</code>. The decode worker attempted to resolve remote
+descriptor addresses within CUDA VRAM memory segments instead of host
+DRAM segments, causing NIXL to throw
+<code>NIXL_ERR_NOT_FOUND</code>.</p>
+<h4 id="fix-applied">Fix Applied:</h4>
+<p>Removed the erroneous <code>== "CUDA"</code> condition and
+dynamically mapped remote memory to <code>"DRAM"</code> whenever the
+remote producer runs on Spyre or CPU host staging:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Fixed base_worker.py in gpu-decode.yaml:</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>remote_mem_type <span class="op">=</span> <span class="st">&#39;DRAM&#39;</span> <span class="cf">if</span> (<span class="bu">getattr</span>(nixl_agent_meta, <span class="st">&#39;attn_backend_name&#39;</span>, <span class="st">&#39;&#39;</span>) <span class="op">==</span> <span class="st">&#39;SPYRE&#39;</span> <span class="kw">or</span> nixl_agent_meta.device_id <span class="op">==</span> <span class="dv">0</span>) <span class="cf">else</span> <span class="va">self</span>.nixl_memory_type</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>descs <span class="op">=</span> <span class="va">self</span>.nixl_wrapper.get_xfer_descs(blocks_data, remote_mem_type)</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="va">self</span>.dst_xfer_side_handles[engine_id][remote_tp_rank] <span class="op">=</span> (</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>.nixl_wrapper.prep_xfer_dlist(remote_agent_name, descs)</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
+<hr />
+<h3
+id="challenge-2-local-handler-scoping-breakage-nameerror-name-nixl_agent_meta-is-not-defined">8.2
+Challenge 2: Local Handler Scoping Breakage
+(<code>NameError: name 'nixl_agent_meta' is not defined</code>)</h3>
+<h4 id="phenomenon-1">Phenomenon:</h4>
+<p>During startup initialization of <code>initialize_kv_cache()</code>,
+the decode engine failed to start with:</p>
+<pre><code>File &quot;.../vllm/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py&quot;, line 1496, in register_local_xfer_handler
+    remote_mem_type = &quot;DRAM&quot; if (getattr(nixl_agent_meta, &quot;attn_backend_name&quot;, &quot;&quot;) == &quot;SPYRE&quot; or nixl_agent_meta.device_id == 0) else self.nixl_memory_type
+NameError: name &#39;nixl_agent_meta&#39; is not defined
+RuntimeError: Engine core initialization failed.</code></pre>
+<h4 id="root-cause-1">Root Cause:</h4>
+<p>A naive regex/string substitution in <code>gpu-decode.yaml</code>
+replaced
+<code>descs = self.nixl_wrapper.get_xfer_descs(blocks_data, self.nixl_memory_type)</code>
+across the entire file. However, that line appears in two distinct
+functions: 1. <code>add_remote_agent</code>: Handles descriptors for the
+<em>remote</em> producer (where <code>nixl_agent_meta</code> is defined
+in scope). 2. <code>register_local_xfer_handler</code>: Handles
+descriptors for the <em>local</em> consumer’s own GPU VRAM buffers
+(where <code>nixl_agent_meta</code> does not exist).</p>
+<h4 id="fix-applied-1">Fix Applied:</h4>
+<p>Surgically constrained the patch in <code>gpu-decode.yaml</code> to
+execute only inside <code>def add_remote_agent</code>, leaving
+<code>register_local_xfer_handler</code> with its local
+<code>self.nixl_memory_type</code> intact:</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>idx <span class="op">=</span> content.find(<span class="st">&quot;def add_remote_agent&quot;</span>)</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> idx <span class="op">!=</span> <span class="op">-</span><span class="dv">1</span>:</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    pre <span class="op">=</span> content[:idx]</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    post <span class="op">=</span> content[idx:]</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    post <span class="op">=</span> re.sub(</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>        <span class="vs">r&quot;(# Register with NIXL\.\s*\n\s*)(?:remote_mem_type = .*?\n\s*)?descs = self\.nixl_wrapper\.get_xfer_descs\(blocks_data, .*?\)&quot;</span>,</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>        <span class="vs">r&quot;\1remote_mem_type = &#39;\&#39;&#39;DRAM&#39;\&#39;&#39; if (getattr(nixl_agent_meta, &#39;\&#39;&#39;attn_backend_name&#39;\&#39;&#39;, &#39;\&#39;&#39;&#39;\&#39;&#39;) == &#39;\&#39;&#39;SPYRE&#39;\&#39;&#39; or nixl_agent_meta.device_id == 0) else self.nixl_memory_type\n        descs = self.nixl_wrapper.get_xfer_descs(blocks_data, remote_mem_type)&quot;</span>,</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>        post,</span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>        count<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>    content <span class="op">=</span> pre <span class="op">+</span> post</span></code></pre></div>
+<hr />
+<h3
+id="challenge-3-upstream-exception-masking-via-indexerror-in-failed-transfer-handler">8.3
+Challenge 3: Upstream Exception Masking via <code>IndexError</code> in
+Failed Transfer Handler</h3>
+<h4 id="phenomenon-2">Phenomenon:</h4>
+<p>Whenever a transfer or handshake failure occurred, the genuine
+underlying exception traceback was obscured by a secondary
+exception:</p>
+<pre><code>Traceback (most recent call last):
+  File &quot;.../vllm/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py&quot;, line 945, in request_ready
+    self._handle_failed_transfer(req_id, None)
+  File &quot;.../vllm/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py&quot;, line 2284, in _handle_failed_transfer
+    self._invalid_block_ids.put(set(meta.local_block_ids[0]))
+IndexError: list index out of range</code></pre>
+<h4 id="root-cause-2">Root Cause:</h4>
+<p>In upstream vLLM <code>base_worker.py:2284</code>,
+<code>_handle_failed_transfer</code> attempted to record invalidated
+block IDs by unconditionally indexing
+<code>meta.local_block_ids[0]</code>. When a request failed before block
+allocation was registered (such as during early handshake failures),
+<code>meta.local_block_ids</code> was empty (<code>[]</code>), causing
+an unhandled <code>IndexError</code> that prevented error logging and
+graceful request rejection.</p>
+<h4 id="fix-applied-2">Fix Applied:</h4>
+<p>Added a defensive guard in <code>_handle_failed_transfer</code>:</p>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Fixed base_worker.py:</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (meta <span class="op">:=</span> <span class="va">self</span>._recving_metadata.get(req_id)) <span class="kw">and</span> <span class="kw">not</span> <span class="va">self</span>._is_hma_required <span class="kw">and</span> meta.local_block_ids:</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>._invalid_block_ids.put(<span class="bu">set</span>(meta.local_block_ids[<span class="dv">0</span>]))</span></code></pre></div>
+<hr />
+<h3
+id="challenge-4-subclass-isinstance-assertion-failure-in-nixlpullconnector">8.4
+Challenge 4: Subclass <code>isinstance</code> Assertion Failure in
+<code>NixlPullConnector</code></h3>
+<h4 id="phenomenon-3">Phenomenon:</h4>
+<p>The initial subclass implementation hot-swapped
+<code>connector_worker.__class__ = SpyreNixlConnectorWorker</code>
+(inheriting from <code>NixlBaseConnectorWorker</code>). Upstream
+<code>NixlPullConnector.start_load_kv()</code> asserts:</p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> <span class="bu">isinstance</span>(<span class="va">self</span>.connector_worker, NixlPullConnectorWorker)</span></code></pre></div>
+<p>This threw an unhandled <code>AssertionError</code> crashing all
+incoming inference requests.</p>
+<h4 id="fix-applied-3">Fix Applied:</h4>
+<p>Refactored connector hierarchy into
+<code>_SpyreRegisterKVCachesMixin</code> and created explicit subclasses
+<code>SpyreNixlPullConnectorWorker</code> (inheriting from
+<code>_SpyreRegisterKVCachesMixin</code> and
+<code>NixlPullConnectorWorker</code>) and
+<code>SpyreNixlPushConnectorWorker</code> satisfying
+<code>isinstance</code> checks.</p>
+<hr />
+<h3
+id="challenge-5-hardware-ras-bus-fence-fault-on-pci-bdf-00004100.0">8.5
+Challenge 5: Hardware RAS Bus Fence Fault on PCI BDF
+<code>0000:41:00.0</code></h3>
+<h4 id="phenomenon-4">Phenomenon:</h4>
+<p>Inference workloads scheduled on card <code>0000:41:00.0</code> on
+node <code>p1-worker-63</code> consistently generated hardware bus fence
+errors (<code>RAS::PCI::BusFence 0xa35e</code>) during warm-up.</p>
+<h4 id="fix-applied-4">Fix Applied:</h4>
+<p>Identified faulty card by cross-correlating
+<code>spyre-metrics-exporter</code> telemetry with device-plugin logs,
+and deployed a dedicated blocker pod
+<code>block-faulty-card-0000-41-00-0</code> holding resource
+<code>ibm.com/spyre_pf_0000_41_00.0: 1</code>, ensuring all inference
+pods allocate only healthy cards (<code>0000:2f:00.0</code>,
+<code>0000:30:00.0</code>, <code>0000:3f:00.0</code>,
+<code>0000:40:00.0</code>).</p>
+</body>
+</html>

@@ -1,0 +1,1511 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>KV Cache Transfer Architecture for Prefill-Decode Disaggregation on IBM Spyre and Hybrid Platforms</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+    html {
+      scroll-behavior: smooth;
+      color: #1f2328;
+      background-color: #ffffff;
+      font-size: 15px;
+    }
+    body {
+      font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 40px 36px 80px 36px;
+      word-wrap: break-word;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      color: #1f2328;
+      font-weight: 600;
+      margin-top: 1.8em;
+      margin-bottom: 0.6em;
+      line-height: 1.3;
+    }
+    h1 { font-size: 2.2em; border-bottom: 2px solid #d0d7de; padding-bottom: 0.3em; margin-top: 0; }
+    h2 { font-size: 1.6em; border-bottom: 1px solid #d0d7de; padding-bottom: 0.3em; }
+    h3 { font-size: 1.25em; }
+    h4 { font-size: 1.05em; }
+
+    a {
+      color: #0969da;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* Responsive scrollable table wrapper */
+    .table-wrapper {
+      overflow-x: auto;
+      max-width: 100%;
+      margin: 1.5em 0;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      background-color: #ffffff;
+      scrollbar-width: thin;
+      scrollbar-color: #8c959f #f6f8fa;
+    }
+    .table-wrapper::-webkit-scrollbar {
+      height: 9px;
+    }
+    .table-wrapper::-webkit-scrollbar-track {
+      background: #f6f8fa;
+      border-radius: 0 0 6px 6px;
+    }
+    .table-wrapper::-webkit-scrollbar-thumb {
+      background-color: #8c959f;
+      border-radius: 4px;
+      border: 2px solid #f6f8fa;
+    }
+    .table-wrapper::-webkit-scrollbar-thumb:hover {
+      background-color: #6e7781;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 600px;
+      margin: 0;
+      font-size: 0.92em;
+      display: table;
+    }
+    th, td {
+      border: 1px solid #d0d7de;
+      padding: 8px 12px;
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      overflow-wrap: break-word;
+      word-break: normal;
+    }
+    th {
+      background-color: #f6f8fa;
+      font-weight: 600;
+    }
+    tr:nth-child(even) {
+      background-color: #fbfcfd;
+    }
+    tr:hover {
+      background-color: #f3f4f6;
+    }
+
+    code {
+      font-family: "IBM Plex Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.88em;
+      background-color: rgba(175, 184, 193, 0.2);
+      padding: 0.2em 0.4em;
+      border-radius: 4px;
+    }
+    pre {
+      background-color: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      padding: 16px;
+      overflow-x: auto;
+      font-size: 0.9em;
+      line-height: 1.45;
+      scrollbar-width: thin;
+      scrollbar-color: #8c959f #f6f8fa;
+    }
+    pre::-webkit-scrollbar {
+      height: 8px;
+    }
+    pre::-webkit-scrollbar-track {
+      background: #f6f8fa;
+      border-radius: 4px;
+    }
+    pre::-webkit-scrollbar-thumb {
+      background-color: #8c959f;
+      border-radius: 4px;
+    }
+    pre code {
+      background-color: transparent;
+      padding: 0;
+      border-radius: 0;
+    }
+
+    blockquote {
+      margin: 1em 0;
+      padding: 0 1em;
+      color: #59636e;
+      border-left: 0.25em solid #d0d7de;
+    }
+
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #d0d7de;
+      border: 0;
+    }
+
+    ul, ol {
+      padding-left: 2em;
+      margin-bottom: 1em;
+    }
+    li + li {
+      margin-top: 0.25em;
+    }
+
+    .katex {
+      font-size: 1.05em;
+    }
+  </style>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      // Automatically wrap all markdown tables in responsive, scrollable container
+      document.querySelectorAll("table").forEach(function (table) {
+        if (!table.parentElement.classList.contains("table-wrapper")) {
+          var wrapper = document.createElement("div");
+          wrapper.className = "table-wrapper";
+          table.parentNode.insertBefore(wrapper, table);
+          wrapper.appendChild(table);
+        }
+      });
+    });
+  </script>
+  <script defer=""
+  src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function () {
+ var mathElements = document.getElementsByClassName("math");
+ var macros = [];
+ for (var i = 0; i < mathElements.length; i++) {
+  var texText = mathElements[i].firstChild;
+  if (mathElements[i].tagName == "SPAN") {
+   katex.render(texText.data, mathElements[i], {
+    displayMode: mathElements[i].classList.contains('display'),
+    throwOnError: false,
+    macros: macros,
+    fleqn: false
+   });
+}}});
+  </script>
+  <link rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">KV Cache Transfer Architecture for Prefill-Decode
+Disaggregation on IBM Spyre and Hybrid Platforms</h1>
+</header>
+<h1
+id="kv-cache-transfer-architecture-for-prefill-decode-disaggregation-on-ibm-spyre-and-hybrid-platforms">KV
+Cache Transfer Architecture for Prefill-Decode Disaggregation on IBM
+Spyre and Hybrid Platforms</h1>
+<h2 id="llm-d-spyrenixlconnector-nixl-spyrepagedkvcache">llm-d +
+SpyreNixlConnector + NIXL + SpyrePagedKVCache</h2>
+<p><strong>Date:</strong> October 30, 2026 (Updated from August 21, 2026
+baseline)<br />
+<strong>Status:</strong> End-to-end KV transfer validated across
+Homogeneous Spyre (TP=1, TP=2) and Heterogeneous Hybrid (1P/2P/4P Spyre
+AIU + 1D NVIDIA A100 GPU)<br />
+<strong>Environment:</strong> Red Hat OpenShift Container Platform
+4.20.36 cluster <code>llm-d.spyre</code>, namespaces
+<code>llm-d-on-aiu</code> &amp; <code>llm-d-on-gpu</code><br />
+<strong>Model:</strong> <code>ibm-granite/granite-4.2-8b</code> (served
+as <code>granite-8b</code>, bfloat16, 40 layers, GQA 8 KV heads)</p>
+<hr />
+<h2 id="overview">1. Overview</h2>
+<p>Prefill-Decode (PD) disaggregation separates the <strong>prefill
+phase</strong> (processing prompt tokens in parallel, computing the
+key-value cache) from the <strong>decode phase</strong> (generating
+output tokens sequentially one at a time). In standard homogeneous
+infrastructure, allocating high-power accelerators to both compute-bound
+prefill and memory-bandwidth-bound decode leads to underutilization and
+queueing delays.</p>
+<p>In a disaggregated setup: - A <strong>prefill instance</strong> runs
+on dedicated accelerators (e.g. low-power IBM Spyre PCIe AIUs at <span
+class="math inline">75\text{W}</span> TDP), processes the input prompt,
+and stages the resulting KV cache in host memory. - A <strong>decode
+instance</strong> runs on separate accelerators (either IBM Spyre AIUs
+or high-bandwidth NVIDIA A100 GPUs at <span
+class="math inline">1,935\text{ GB/s}</span> HBM2e), retrieves the
+staged KV cache over a high-speed interconnect, and generates tokens
+without re-computing prompt attention.</p>
+<h3 id="key-architectural-benefits">Key Architectural Benefits</h3>
+<ul>
+<li><strong>Resource Specialization:</strong> Compute-bound prefill is
+matched with cost- and energy-efficient accelerators (IBM Spyre AIU);
+memory-bandwidth-bound decode is matched with high-throughput engines
+(Spyre AIU or NVIDIA A100 GPU).</li>
+<li><strong>Throughput Decoupling:</strong> Long prompt arrivals no
+longer interrupt active token generation loops on decode workers,
+eliminating decode stalling.</li>
+<li><strong>First-Token Latency (TTFT) Consistency:</strong>
+Pre-computed KV cache transfer replaces redundant prompt
+recomputation.</li>
+<li><strong>Heterogeneous Hybrid Capability:</strong> Low-cost IBM Spyre
+PCIe cards replace <span class="math inline">50\%</span> to <span
+class="math inline">75\%</span> of expensive GPU capacity while
+achieving up to <span class="math inline">90\%\text{--}97\%</span> of
+pure-GPU throughput.</li>
+</ul>
+<p>In this implementation, KV cache transfer uses <strong>NIXL
+(Non-contiguous KV-cache Interface for eXchange across Layers)</strong>
+v1.5.0 (commit <code>8708e35e</code>) with the <strong>UCX</strong>
+transport layer (v1.19.0 / v1.23.x), coordinated by the <strong>llm-d
+routing sidecar</strong> (routing-proxy v0.8.0 / v0.11.0) and
+<strong>Endpoint Picker (EPP)</strong> on the latest
+<code>vllm-spyre-nixl-latest:v21</code> (and <code>v20</code>) container
+stack running <strong>vLLM 0.28.0</strong>.</p>
+<hr />
+<h2 id="system-components-deployment-topologies">2. System Components
+&amp; Deployment Topologies</h2>
+<h3 id="component-inventory">2.1 Component Inventory</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Component</th>
+<th style="text-align: left;">Role</th>
+<th style="text-align: left;">Container Image</th>
+<th style="text-align: left;">Configuration &amp; Ports</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><strong>Istio Ingress
+Gateway</strong></td>
+<td style="text-align: left;">External entry point &amp; TLS
+termination</td>
+<td
+style="text-align: left;"><code>llm-d-inference-gateway-istio</code></td>
+<td style="text-align: left;">ClusterIP <code>172.30.116.228:80</code>,
+routes <code>/v1/...</code>, <code>/tp1/v1/...</code>,
+<code>/hybrid/v1/...</code>, <code>/gpu/v1/...</code></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Endpoint Picker
+(EPP)</strong></td>
+<td style="text-align: left;">Global request scheduler &amp; load
+scorer</td>
+<td
+style="text-align: left;"><code>pd-disaggregation-epp:v0.11.0</code></td>
+<td style="text-align: left;">Token-load scorer balancing prefill across
+1P, 2P, or 4P workers</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>routing-proxy
+Sidecar</strong></td>
+<td style="text-align: left;">Orchestrates 2-phase prefill/decode
+protocol</td>
+<td
+style="text-align: left;"><code>ghcr.io/llm-d/llm-d-routing-sidecar:v0.8.0</code></td>
+<td style="text-align: left;">Container port 8000 (ingress), forwards
+Phase 2 to modelserver port 8001</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Spyre Prefill
+Modelserver</strong></td>
+<td style="text-align: left;">Prompt prefill on IBM Spyre AIU</td>
+<td
+style="text-align: left;"><code>vllm-spyre-nixl-latest:v21</code></td>
+<td style="text-align: left;">Port 8000, TP=1, 1 AIU
+(<code>spyre_pf</code>),
+<code>--kv-connector SpyreNixlConnector</code></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>Spyre Decode
+Modelserver</strong></td>
+<td style="text-align: left;">Token decode on IBM Spyre AIU</td>
+<td
+style="text-align: left;"><code>vllm-spyre-nixl-latest:v21</code></td>
+<td style="text-align: left;">Port 8001, TP=1 or TP=2, 1–2 AIUs,
+<code>--kv-connector SpyreNixlConnector</code></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>NVIDIA GPU Decode
+Modelserver</strong></td>
+<td style="text-align: left;">Token decode on NVIDIA A100 GPU</td>
+<td style="text-align: left;"><code>vllm-openai:v0.6.3</code> /
+<code>vllm:0.28.0</code></td>
+<td style="text-align: left;">Port 8001, TP=1, 1 A100-PCIE-80GB GPU,
+<code>--block-size=64</code>,
+<code>--kv-connector NixlConnector</code></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>NIXL Protocol
+Library</strong></td>
+<td style="text-align: left;">Cross-layer KV memory registration &amp;
+DMA</td>
+<td style="text-align: left;">Built from source (v1.5.0)</td>
+<td style="text-align: left;">Commit <code>8708e35e</code>, Python
+bindings in <code>/opt/nixl</code>, side-channel port 5600</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>UCX Transport Engine</strong></td>
+<td style="text-align: left;">Inter-process / inter-node memory
+transport</td>
+<td style="text-align: left;"><code>/opt/ucx</code> (v1.19.0 /
+v1.23.x)</td>
+<td style="text-align: left;">CMA (same-node shared memory) or TCP
+(cross-node overlay)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="pod-layouts">2.2 Pod Layouts</h3>
+<h4
+id="a-homogeneous-prefill-decode-disaggregation-spyre-aiu-to-spyre-aiu">(a)
+Homogeneous Prefill-Decode Disaggregation (Spyre AIU <span
+class="math inline">\to</span> Spyre AIU)</h4>
+<p>In the homogeneous configuration (namespace
+<code>llm-d-on-aiu</code>), both prefill and decode pods reside on IBM
+Spyre AIU worker nodes (<code>p1-worker-63</code> or
+<code>p1-worker-69</code>). Inter-pod KV transfer leverages Linux
+Cross-Memory-Attach (CMA) via <code>process_vm_readv</code> for
+zero-network same-node transfers, or UCX TCP:</p>
+<pre><code>OpenShift Node: p1-worker-63 / p1-worker-69 (Namespace: llm-d-on-aiu)
++----------------------------------------------------------------------------------------+
+|                                                                                        |
+|  Decode Pod (2/2 Ready)                                Prefill Pod (1/1 Ready)         |
+|  IP: 10.130.2.28 (Node 63) / 10.131.2.49 (Node 69)     IP: 10.130.2.29 / 10.131.2.50   |
+|  +---------------------------------+                   +-----------------------------+ |
+|  | Container: routing-proxy        |                   | Container: modelserver      | |
+|  | Port: 8000 (external ingress)   |                   | Port: 8000 (Phase 1)        | |
+|  | KVConnector: SpyreNixlConnector |                   | TP=1, 1x IBM Spyre AIU      | |
+|  | Forwards Phase 2 to :8001       |                   | NIXL side-channel: 5600     | |
+|  +---------------------------------+                   +--------------+--------------+ |
+|  | Container: modelserver          |                                  |                |
+|  | Port: 8001 (internal decode)    |&lt;---------------------------------+                |
+|  | TP=1 (1 AIU) or TP=2 (2 AIUs)   |   UCX Transport (CMA process_vm_readv / TCP)      |
+|  | NIXL side-channel: 5600         |   D2H -&gt; Host DRAM -&gt; H2D                         |
+|  +---------------------------------+                                                   |
+|                                                                                        |
++----------------------------------------------------------------------------------------+</code></pre>
+<h4
+id="b-heterogeneous-hybrid-prefill-decode-disaggregation-spyre-aiu-to-nvidia-a100-gpu">(b)
+Heterogeneous Hybrid Prefill-Decode Disaggregation (Spyre AIU <span
+class="math inline">\to</span> NVIDIA A100 GPU)</h4>
+<p>In the heterogeneous hybrid configuration (namespace
+<code>llm-d-on-gpu</code>), prefill requests are processed across 1, 2,
+or 4 IBM Spyre AIU worker pods on node <code>p1-worker-63</code> or
+<code>p1-worker-69</code>, while token decode runs on a dedicated NVIDIA
+A100-PCIE-80GB GPU on node <code>p1-gpu-worker-1</code>. NIXL transfers
+KV blocks across physical nodes via UCX TCP over OpenShift SDN pod
+networking:</p>
+<pre><code>OpenShift Cluster: llm-d.spyre (Namespace: llm-d-on-gpu)
++----------------------------------------------+       +----------------------------------------------+
+| Prefill Tier: Node p1-worker-63              |       | Decode Tier: Node p1-gpu-worker-1            |
+| (1x, 2x, or 4x IBM Spyre AIU Replicas)       |       | (Dedicated NVIDIA A100-PCIE-80GB GPU)        |
+|                                              |       |                                              |
+| +------------------------------------------+ |       | +------------------------------------------+ |
+| | Pod: pd-disagg-hybrid-spyre-prefill-P1   | |       | | Pod: pd-disagg-hybrid-nvidia-gpu-decode  | |
+| | IP: 10.130.2.55 | AIU Card 2f:00.0 (75W) | |       | | IP: 10.128.4.127 | NVIDIA A100 GPU 2     | |
+| | TP=1, vLLM 0.28.0 (Spyre Plugin)         | |       | |                                          | |
+| | NIXL side-channel: 5600                  | |       | | +--------------------------------------+ | |
+| +--------------------+---------------------+ |       | | | Container: routing-proxy (Port 8000) | | |
+|                      |                       |       | | | Ingress, EPP load dispatch           | | |
+| +--------------------+---------------------+ |       | | +--------------------------------------+ | |
+| | Pod: pd-disagg-hybrid-spyre-prefill-P2   | |       | | | Container: modelserver (Port 8001)   | | |
+| | IP: 10.130.2.72 | AIU Card 30:00.0 (75W) | |       | | | TP=1, vLLM 0.28.0 (CUDA Plugin)      | | |
+| | TP=1, vLLM 0.28.0 (Spyre Plugin)         | |       | | | --block-size=64                      | | |
+| | NIXL side-channel: 5600                  | |       | | | enforce_handshake_compat: false      | | |
+| +--------------------+---------------------+ |       | | | NIXL side-channel: 5600              | | |
+|                      |                       |       | | +------------------^-------------------+ | |
+|                      |                       |       | +--------------------+---------------------+ |
++----------------------+-----------------------+       +----------------------+-----------------------+
+                       |                                                      |
+                       +--------------- Cross-Node UCX TCP Interconnect ------+
+                                        (OpenShift 100 GbE RoCE / TCP Network)
+                                        D2H (Spyre) -&gt; CPU Staging -&gt; UCX TCP -&gt; H2D (GPU VRAM)</code></pre>
+<hr />
+<h2 id="request-flow-disaggregated-protocol">3. Request Flow &amp;
+Disaggregated Protocol</h2>
+<h3 id="multi-route-ingress-gateway-architecture">3.1 Multi-Route
+Ingress &amp; Gateway Architecture</h3>
+<p>External clients connect through the Istio Ingress Gateway
+(<code>172.30.116.228:80</code>), which evaluates HTTPRoutes and
+delegates request scheduling to the Endpoint Picker (EPP):</p>
+<pre><code>External Client
+      |
+      v
+Istio Ingress Gateway (Port 80)
+      |
+      +---&gt; HTTPRoute: /tp1/v1/completions ----&gt; EPP --&gt; Spyre TP=1 Disaggregated Pool (Node 63)
+      +---&gt; HTTPRoute: /v1/completions --------&gt; EPP --&gt; Spyre TP=2 Disaggregated Pool (Node 69)
+      +---&gt; HTTPRoute: /hybrid/v1/completions --&gt; EPP --&gt; Hybrid (1P/2P/4P Spyre + 1D GPU) Pool
+      +---&gt; HTTPRoute: /gpu/v1/completions ----&gt; EPP --&gt; Homogeneous A100 GPU Pool (Node GPU-1)</code></pre>
+<p>When a request arrives at the target decode pod’s
+<code>routing-proxy</code> (port 8000): 1. <strong>Header
+Inspection:</strong> The routing-proxy inspects the
+<code>x-prefiller-host-port</code> header injected by EPP. 2.
+<strong>Phase 1 (Prefill Dispatch):</strong> The proxy forwards the
+prompt to the designated prefill pod at port 8000 with
+<code>max_tokens=1</code> and <code>do_remote_decode=true</code>. 3.
+<strong>Phase 2 (Decode Dispatch):</strong> Upon receiving
+<code>kv_transfer_params</code> from Phase 1, the proxy issues an
+internal HTTP request to the local decode engine at port 8001 with
+<code>do_remote_prefill=true</code> and the full token budget.</p>
+<pre><code>                  +----------------------------------------------+
+                  |              External Client                 |
+                  +----------------------+-----------------------+
+                                         | POST /hybrid/v1/completions
+                                         v
+                  +----------------------------------------------+
+                  |            Istio Ingress Gateway             |
+                  +----------------------+-----------------------+
+                                         |
+                                         v
+                  +----------------------------------------------+
+                  |          Endpoint Picker (EPP)               |
+                  |   Selects Prefill Worker (P1..P4) via LLR    |
+                  +----------------------+-----------------------+
+                                         | Injects x-prefiller-host-port
+                                         v
+                  +----------------------------------------------+
+                  |      Decode Pod (routing-proxy :8000)        |
+                  +--------------+-------------------------------+
+                                 |
+        +------------------------+------------------------+
+        | Phase 1: POST to Prefill Pod (:8000)            | Phase 2: POST to Decode Modelserver (:8001)
+        v                                                 v
++------------------------------+                  +---------------------------------------------+
+|  Spyre Prefill Worker (P_i)  |                  |       Decode Modelserver (Port 8001)        |
+|                              |                  |                                             |
+| 1. Forward pass on AIU       |                  | 4. NIXL Handshake (Port 5600)               |
+| 2. D2H: AIU DRAM -&gt; Host     |                  | 5. NIXL READ: Fetch KV Blocks via UCX       |
+| 3. Return KVTransferParams   |-----------------&gt;| 6. H2D: Host Staging -&gt; Device Memory      |
+|    (engine_id, blocks, host) |  HTTP 200 JSON   | 7. Autoregressive Token Generation (Decode) |
++------------------------------+                  +----------------------+----------------------+
+                                                                         |
+                                                                         v
+                                                          Streaming Response to Client</code></pre>
+<hr />
+<h3 id="phase-1-prefill-detail-d2h-staging">3.2 Phase 1 — Prefill Detail
+&amp; D2H Staging</h3>
+<p>The routing-proxy issues Phase 1 to the prefill instance:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="er">POST</span> <span class="er">http://10.130.2.55:8000/v1/completions</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;model&quot;</span><span class="fu">:</span> <span class="st">&quot;granite-8b&quot;</span><span class="fu">,</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;prompt&quot;</span><span class="fu">:</span> <span class="st">&quot;&lt;user_prompt&gt;&quot;</span><span class="fu">,</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;max_tokens&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;kv_transfer_params&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;do_remote_decode&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_engine_id&quot;</span><span class="fu">:</span> <span class="st">&quot;c4b9d0e2-8812-4f3a-9e11-37d4029fa1b0&quot;</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>Execution steps on the prefill engine: 1. <strong>Attention
+Compute:</strong> Executes the prompt forward pass using SENDNN static
+graph execution kernels on IBM Spyre AIU. 2. <strong>D2H Copy
+(<code>save_kv_to_host</code>):</strong> Copies allocated KV pages from
+<code>SpyrePagedKVCache</code> AIU DRAM into contiguous pinned host
+staging tensors: <span
+class="math display">\text{SpyrePaged.k\_pages}[\text{blk}]
+\xrightarrow{\text{D2H}}
+\text{staging\_k}[\text{layer}][\text{blk}]</span> 3. <strong>Response
+Packaging:</strong> Returns HTTP 200 containing
+<code>kv_transfer_params</code>:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;kv_transfer_params&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;do_remote_prefill&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_block_ids&quot;</span><span class="fu">:</span> <span class="ot">[[</span><span class="dv">1</span><span class="ot">]]</span><span class="fu">,</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_engine_id&quot;</span><span class="fu">:</span> <span class="st">&quot;1a17e9e2-077e-44d2-a3a6-b2fcca665e6c&quot;</span><span class="fu">,</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_request_id&quot;</span><span class="fu">:</span> <span class="st">&quot;cmpl-a25f9e90701c5a3e-0-84ff2e97&quot;</span><span class="fu">,</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_host&quot;</span><span class="fu">:</span> <span class="st">&quot;10.130.2.55&quot;</span><span class="fu">,</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_port&quot;</span><span class="fu">:</span> <span class="dv">5600</span><span class="fu">,</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;tp_size&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_num_tokens&quot;</span><span class="fu">:</span> <span class="dv">16</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<hr />
+<h3 id="phase-2-decode-detail-nixl-transfer-h2d-ingestion">3.3 Phase 2 —
+Decode Detail, NIXL Transfer &amp; H2D Ingestion</h3>
+<p>The routing-proxy injects <code>kv_transfer_params</code> into the
+Phase 2 request to the local decode engine:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="er">POST</span> <span class="er">http://localhost:8001/v1/completions</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;model&quot;</span><span class="fu">:</span> <span class="st">&quot;granite-8b&quot;</span><span class="fu">,</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;prompt&quot;</span><span class="fu">:</span> <span class="st">&quot;&lt;user_prompt&gt;&quot;</span><span class="fu">,</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;max_tokens&quot;</span><span class="fu">:</span> <span class="dv">200</span><span class="fu">,</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;kv_transfer_params&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;do_remote_prefill&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_block_ids&quot;</span><span class="fu">:</span> <span class="ot">[[</span><span class="dv">1</span><span class="ot">]]</span><span class="fu">,</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_engine_id&quot;</span><span class="fu">:</span> <span class="st">&quot;1a17e9e2-077e-44d2-a3a6-b2fcca665e6c&quot;</span><span class="fu">,</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_request_id&quot;</span><span class="fu">:</span> <span class="st">&quot;cmpl-a25f9e90701c5a3e-0-84ff2e97&quot;</span><span class="fu">,</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_host&quot;</span><span class="fu">:</span> <span class="st">&quot;10.130.2.55&quot;</span><span class="fu">,</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_port&quot;</span><span class="fu">:</span> <span class="dv">5600</span><span class="fu">,</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;tp_size&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_num_tokens&quot;</span><span class="fu">:</span> <span class="dv">16</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>Execution steps on the decode engine: 1. <strong>NIXL
+Handshake:</strong> Connects to <code>remote_host:5600</code> via TCP
+side-channel, exchanges agent metadata, and validates layout
+compatibility (<code>enforce_handshake_compat: false</code> in
+heterogeneous mode). 2. <strong>NIXL READ Transfer:</strong> Pulls the
+specified KV block descriptors from prefill host memory into decode host
+staging memory via UCX (CMA on same-node Spyre; TCP over network for
+Hybrid GPU). 3. <strong>H2D Ingestion
+(<code>sync_recved_kv_to_device</code>):</strong> Copies received blocks
+from host staging memory to device memory
+(<code>SpyrePagedKVCache</code> AIU DRAM on Spyre; PyTorch CUDA
+PagedAttention tensor on NVIDIA A100 GPU). 4. <strong>Autoregressive
+Generation:</strong> Decodes tokens sequentially at the device’s native
+GEMV decode rate (<span class="math inline">\approx 7.2\text{
+tok/s}</span> on Spyre AIU TP=1; <span class="math inline">\approx
+80\text{ tok/s}</span> on NVIDIA A100 GPU).</p>
+<hr />
+<h2 id="core-architecture-spyrenixlconnector-memory-staging">4. Core
+Architecture: <code>SpyreNixlConnector</code> &amp; Memory Staging</h2>
+<h3 id="subclass-architecture-factory-registration">4.1 Subclass
+Architecture &amp; Factory Registration</h3>
+<p>To maintain clean modularity and ensure full compatibility with
+upstream vLLM 0.28.0+, the legacy full-file <code>base_worker.py</code>
+overwrite was replaced with a dedicated mixin and subclass architecture
+in package <code>spyre_inference</code>:</p>
+<pre><code>                           NixlBaseConnectorWorker (Upstream vLLM)
+                                      ^
+                                      |
+                         _SpyreRegisterKVCachesMixin
+                                      ^
+                                      |
+            +-------------------------+-------------------------+
+            |                                                   |
+SpyreNixlPullConnectorWorker                        SpyreNixlPushConnectorWorker
+ (IS-A NixlPullConnectorWorker)                      (IS-A NixlPushConnectorWorker)</code></pre>
+<p>Key Design Elements: 1.
+<strong><code>_SpyreRegisterKVCachesMixin</code>:</strong> Overrides
+only <code>register_kv_caches()</code> to handle
+<code>SpyrePagedKVCache</code>, allocates contiguous CPU host staging
+buffers, and binds <code>_spyre_copy_blocks</code> for D2H and H2D data
+movement. 2. <strong><code>SpyreNixlPullConnectorWorker</code> &amp;
+<code>SpyreNixlPushConnectorWorker</code>:</strong> Directly inherit
+from upstream <code>NixlPullConnectorWorker</code> and
+<code>NixlPushConnectorWorker</code>, ensuring that upstream type
+assertions
+(<code>assert isinstance(worker, NixlPullConnectorWorker)</code>)
+succeed without error. 3.
+<strong><code>register_spyre_nixl_connectors()</code>:</strong>
+Automatically invoked inside <code>spyre_inference/__init__.py</code>
+during engine startup, registering <code>SpyreNixlConnector</code> and
+<code>SpyreNixlPushConnector</code> directly in
+<code>KVConnectorFactory</code>.</p>
+<hr />
+<h3 id="kv-cache-memory-layout-paged-staging">4.2 KV Cache Memory Layout
+&amp; Paged Staging</h3>
+<p>IBM Granite-4.2-8B comprises 40 hidden layers, 8 Key/Value heads
+(<span class="math inline">H_{kv} = 8</span>), and head dimension <span
+class="math inline">D = 128</span>. With native block size <span
+class="math inline">\text{block\_size} = 64</span> tokens:</p>
+<p><span class="math display">\text{Bytes per Block} = 40\text{ layers}
+\times 2\,(\text{K, V}) \times 8\text{ heads} \times 64\text{ tokens}
+\times 128\text{ dims} \times 2\text{ bytes (bfloat16)} =
+\mathbf{10.24\text{ MB}}</span></p>
+<p>Staging Tensor Structure per Worker: - <strong>80 Contiguous
+Regions:</strong> 40 layers <span class="math inline">\times 2</span> (K
+and V). - <strong>Region Shape:</strong>
+<code>(num_blocks, 8, 64, 128)</code> in <code>torch.bfloat16</code>. -
+<strong>Registration:</strong> Registered with NIXL as contiguous
+<code>DRAM_SEG</code> regions, exposing individual 64-token block slices
+to NIXL descriptor indexing.</p>
+<hr />
+<h3 id="nixl-handshake-protocol">4.3 NIXL Handshake &amp; Protocol</h3>
+<pre><code>Decode Worker (PID d_worker)             Prefill Worker (PID p_worker)
+      |                                                |
+      |-- TCP Connect to Port 5600 -------------------&gt;|
+      |&lt;- NixlHandshakePayload (Metadata + Descs) -----|
+      |                                                |
+      |-- Verify Dimensions &amp; Staging Strides --------&gt;|
+      |-- nixl_wrapper.add_remote_agent() ------------&gt;|
+      |   +- Build Remote Descriptors (prep_xfer_dlist)|
+      |   +- Establish UCX Channel (CMA / TCP) -------&gt;|
+      |                                                |
+Per Request:                                           |
+      |-- nixl_wrapper.transfer(&quot;READ&quot;, block_ids) ---&gt;| (Async DMA Read)
+      |&lt;-- UCX Transfer Completed (DONE) --------------|
+      |                                                |
+      |-- sync_recved_kv_to_device() (H2D Copy) -------|
+      |-- Autoregressive Decode Step 1 ----------------|</code></pre>
+<hr />
+<h3 id="tp-head-splitting-tp1-prefill-to-tp2-decode">4.4 TP Head
+Splitting (TP=1 Prefill to TP=2 Decode)</h3>
+<p>When prefill runs at <span class="math inline">\text{TP}=1</span> (8
+KV heads staged together) and decode runs at <span
+class="math inline">\text{TP}=2</span> (4 KV heads per card), NIXL
+computes rank-specific byte offsets into the prefill staging buffer:</p>
+<pre><code>Prefill TP=1 Staging Buffer (8 KV Heads per Layer):
++--------------------------------------+--------------------------------------+
+|  Heads 0 .. 3 (65,536 Bytes / Block) |  Heads 4 .. 7 (65,536 Bytes / Block) |
++------------------+-------------------+------------------+-------------------+
+                   |                                      |
+                   v                                      v
+        Decode TP Rank 0 (Heads 0..3)          Decode TP Rank 1 (Heads 4..7)
+        Offset: 0 Bytes                        Offset: 65,536 Bytes</code></pre>
+<hr />
+<h2 id="key-code-changes-modified-components">5. Key Code Changes &amp;
+Modified Components</h2>
+<h3 id="spyre_connector.py">5.1 <code>spyre_connector.py</code></h3>
+<p>Located at:
+<code>guides/pd-disaggregation/modelserver/aiu/vllm/patches/spyre_inference/distributed/kv_transfer/kv_connector/v1/nixl/spyre_connector.py</code></p>
+<p>Key functionality: - Defines <code>_SpyreRegisterKVCachesMixin</code>
+implementing the Spyre-specific <code>register_kv_caches()</code>
+routine. - Instantiates CPU staging tensors:
+<code>torch.empty((num_blocks, num_kv_heads, block_size, head_dim), dtype=torch.bfloat16, pin_memory=True)</code>.
+- Defines <code>_spyre_copy_blocks</code> closure handling
+non-contiguous <code>SpyrePagedKVCache</code> block copies
+(<code>d2h</code> on save, <code>h2d</code> on sync). - Exports
+<code>SpyreNixlPullConnectorWorker</code>,
+<code>SpyreNixlPushConnectorWorker</code>,
+<code>SpyreNixlConnector</code>, and
+<code>SpyreNixlPushConnector</code>.</p>
+<hr />
+<h3 id="spyre_inference__init__.py">5.2
+<code>spyre_inference/__init__.py</code></h3>
+<p>Integrates connector auto-registration into the
+<code>spyre_inference</code> package initialization:</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> register():</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Existing SENDNN static graph and device registration...</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>        <span class="im">from</span> spyre_inference.distributed.kv_transfer.kv_connector.v1.nixl.spyre_connector <span class="im">import</span> (</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>            register_spyre_nixl_connectors,</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>        register_spyre_nixl_connectors()</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>        logger.warning(<span class="ss">f&quot;Could not register Spyre NIXL connectors: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">&quot;</span>)</span></code></pre></div>
+<hr />
+<h3 id="utils.py-patch">5.3 <code>utils.py</code> Patch</h3>
+<p>Located at:
+<code>vllm/distributed/kv_transfer/kv_connector/utils.py</code> -
+Handles <code>(k_shape, v_shape)</code> tuple unwrapping inside
+<code>TransferTopology.__post_init__()</code>. - Accommodates asymmetric
+prefill/decode block configurations and ensures descriptor address
+validity.</p>
+<hr />
+<h3 id="kubernetes-patch-manifests-runtime-hooks">5.4 Kubernetes Patch
+Manifests &amp; Runtime Hooks</h3>
+<ul>
+<li><strong>Prefill Manifest (<code>patch-prefill-aiu-v1.yaml</code> /
+<code>patch-prefill-aiu-tp1.yaml</code>):</strong> Configures
+<code>--kv-connector SpyreNixlConnector</code>,
+<code>--kv-role kv_producer</code>, and port 5600 side-channel
+listener.</li>
+<li><strong>Decode Manifest (<code>patch-decode-aiu-v1.yaml</code> /
+<code>patch-decode-aiu-tp1.yaml</code>):</strong> Configures
+<code>--kv-connector SpyreNixlConnector</code>,
+<code>--kv-role kv_consumer</code>, and sidecar routing proxy.</li>
+<li><strong>Heterogeneous GPU Manifest
+(<code>patch-decode-gpu-hybrid.yaml</code>):</strong> Configures
+<code>--block-size=64</code>, <code>--kv-connector NixlConnector</code>,
+and <code>enforce_handshake_compat: false</code>.</li>
+</ul>
+<hr />
+<h2 id="measured-performance-latency-breakdown">6. Measured Performance
+&amp; Latency Breakdown</h2>
+<h3 id="stage-granular-latency-breakdown">6.1 7-Stage Granular Latency
+Breakdown</h3>
+<p>Microsecond-resolution profiling across homogeneous Spyre AIU,
+homogeneous NVIDIA A100 GPU, and Heterogeneous Hybrid PD configurations
+(<code>ibm-granite/granite-4.2-8b</code>):</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 10%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: center;">Stage</th>
+<th style="text-align: left;">Pipeline Stage Description</th>
+<th style="text-align: center;">Spyre AIU TP=1 (P=16)</th>
+<th style="text-align: center;">A100 GPU TP=1 (P=16)</th>
+<th style="text-align: center;">Hybrid PD (P=16)</th>
+<th style="text-align: center;">Spyre AIU TP=1 (P=128)</th>
+<th style="text-align: center;">A100 GPU TP=1 (P=128)</th>
+<th style="text-align: center;">Hybrid PD (P=128)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: center;"><strong>1</strong></td>
+<td style="text-align: left;"><strong>Prompt Compute
+(<code>T_prompt</code>)</strong></td>
+<td style="text-align: center;"><span class="math inline">22.60\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">5.50\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">22.60\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">115.60\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">8.50\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">115.60\text{
+ms}</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><strong>2</strong></td>
+<td style="text-align: left;"><strong>Prefill D2H Staging
+(<code>T_d2h</code>)</strong></td>
+<td style="text-align: center;"><span class="math inline">1.24\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">0.55\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">1.24\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">2.51\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">1.02\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">2.51\text{
+ms}</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><strong>3</strong></td>
+<td style="text-align: left;"><strong>NIXL Metadata Handshake
+(<code>T_meta</code>)</strong></td>
+<td style="text-align: center;"><span class="math inline">0.012\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">0.009\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">0.012\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">0.015\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">0.013\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">0.015\text{
+ms}</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><strong>4</strong></td>
+<td style="text-align: left;"><strong>NIXL Inter-Node Transfer
+(<code>T_nixl</code>)</strong></td>
+<td style="text-align: center;"><span class="math inline">10.20\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">1.20\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">19.68\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">21.00\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">2.40\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">39.20\text{
+ms}</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><strong>5</strong></td>
+<td style="text-align: left;"><strong>Decode H2D Ingestion
+(<code>T_h2d</code>)</strong></td>
+<td style="text-align: center;"><span class="math inline">1.23\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">0.64\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">0.64\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">2.51\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">1.03\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">1.03\text{
+ms}</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><strong>6</strong></td>
+<td style="text-align: left;"><strong>Gateway &amp; Sidecar Sync
+(<code>T_sync</code>)</strong></td>
+<td style="text-align: center;"><span class="math inline">20.00\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">86.00\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">86.00\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">22.00\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">86.00\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">86.00\text{
+ms}</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;"><strong>7</strong></td>
+<td style="text-align: left;"><strong>First Token Decode Step
+(<code>T_step1</code>)</strong></td>
+<td style="text-align: center;"><span class="math inline">134.10\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">14.50\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">14.50\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">134.10\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">14.50\text{
+ms}</span></td>
+<td style="text-align: center;"><span class="math inline">14.50\text{
+ms}</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: center;"><strong>—</strong></td>
+<td style="text-align: left;"><strong>Theoretical E2E TTFT</strong></td>
+<td style="text-align: center;"><strong><span
+class="math inline">\approx 189.4\text{ ms}</span></strong></td>
+<td style="text-align: center;"><strong><span
+class="math inline">\approx 108.4\text{ ms}</span></strong></td>
+<td style="text-align: center;"><strong><span
+class="math inline">\approx 144.7\text{ ms}</span></strong></td>
+<td style="text-align: center;"><strong><span
+class="math inline">\approx 297.7\text{ ms}</span></strong></td>
+<td style="text-align: center;"><strong><span
+class="math inline">\approx 113.5\text{ ms}</span></strong></td>
+<td style="text-align: center;"><strong><span
+class="math inline">\approx 258.9\text{ ms}</span></strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="end-to-end-streaming-performance">6.2 End-to-End Streaming
+Performance</h3>
+<table>
+<colgroup>
+<col style="width: 11%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+<col style="width: 14%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Topology / Experiment</th>
+<th style="text-align: center;">Prompt (<span
+class="math inline">P</span>)</th>
+<th style="text-align: center;">Output (<span
+class="math inline">M</span>)</th>
+<th style="text-align: center;">Mean TTFT (s)</th>
+<th style="text-align: center;">Total Wall Time (s)</th>
+<th style="text-align: center;">Post-TTFT tok/s</th>
+<th style="text-align: center;">Total tok/s</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><strong>Spyre Standalone
+TP=1</strong></td>
+<td style="text-align: center;">16</td>
+<td style="text-align: center;">200</td>
+<td style="text-align: center;"><span class="math inline">0.233 \pm
+0.004</span></td>
+<td style="text-align: center;"><span class="math inline">27.62 \pm
+0.06</span></td>
+<td style="text-align: center;"><span class="math inline">7.23 \pm
+0.01</span></td>
+<td style="text-align: center;"><span class="math inline">7.20 \pm
+0.02</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Spyre Disaggregated TP=1 (Exp
+C)</strong></td>
+<td style="text-align: center;">16</td>
+<td style="text-align: center;">200</td>
+<td style="text-align: center;"><span class="math inline">0.592 \pm
+0.293</span></td>
+<td style="text-align: center;"><span class="math inline">32.78 \pm
+0.42</span></td>
+<td style="text-align: center;"><span class="math inline">6.18 \pm
+0.03</span></td>
+<td style="text-align: center;"><span class="math inline">6.10 \pm
+0.08</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>Spyre Disaggregated TP=2 (Exp
+D)</strong></td>
+<td style="text-align: center;">16</td>
+<td style="text-align: center;">200</td>
+<td style="text-align: center;"><span class="math inline">2.690 \pm
+1.000</span></td>
+<td style="text-align: center;"><span class="math inline">36.58 \pm
+2.59</span></td>
+<td style="text-align: center;"><span class="math inline">5.88 \pm
+0.29</span></td>
+<td style="text-align: center;"><span class="math inline">5.48 \pm
+0.36</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>GPU Standalone TP=1</strong></td>
+<td style="text-align: center;">16</td>
+<td style="text-align: center;">200</td>
+<td style="text-align: center;"><span class="math inline">0.023 \pm
+0.007</span></td>
+<td style="text-align: center;"><span class="math inline">2.915 \pm
+0.011</span></td>
+<td style="text-align: center;"><span class="math inline">68.80 \pm
+0.11</span></td>
+<td style="text-align: center;"><span class="math inline">68.61 \pm
+0.25</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>GPU Disaggregated
+1P1D</strong></td>
+<td style="text-align: center;">16</td>
+<td style="text-align: center;">200</td>
+<td style="text-align: center;"><span class="math inline">0.108 \pm
+0.006</span></td>
+<td style="text-align: center;"><span class="math inline">2.990 \pm
+0.005</span></td>
+<td style="text-align: center;"><span class="math inline">69.05 \pm
+0.08</span></td>
+<td style="text-align: center;"><span class="math inline">66.89 \pm
+0.12</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Heterogeneous
+1P-Hybrid</strong></td>
+<td style="text-align: center;">16</td>
+<td style="text-align: center;">200</td>
+<td style="text-align: center;"><span class="math inline">0.198 \pm
+0.002</span></td>
+<td style="text-align: center;"><span class="math inline">2.698 \pm
+0.001</span></td>
+<td style="text-align: center;"><span class="math inline">79.63 \pm
+0.02</span></td>
+<td style="text-align: center;"><span class="math inline">74.13 \pm
+0.03</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>Heterogeneous 2P-Hybrid (<span
+class="math inline">B=16</span>)</strong></td>
+<td style="text-align: center;">16</td>
+<td style="text-align: center;">200</td>
+<td style="text-align: center;"><span class="math inline">1.355 \pm
+0.209</span></td>
+<td style="text-align: center;"><span class="math inline">5.278 \pm
+0.290</span></td>
+<td style="text-align: center;"><span class="math inline">77.32 \pm
+0.18</span></td>
+<td style="text-align: center;"><strong><span class="math inline">608.03
+\pm 34.71</span> (agg)</strong></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Heterogeneous 4P-Hybrid (<span
+class="math inline">B=128</span>)</strong></td>
+<td style="text-align: center;">32</td>
+<td style="text-align: center;">1024</td>
+<td style="text-align: center;"><span class="math inline">6.129 \pm
+0.082</span></td>
+<td style="text-align: center;"><span class="math inline">35.01 \pm
+0.68</span></td>
+<td style="text-align: center;"><span class="math inline">77.50 \pm
+0.14</span></td>
+<td style="text-align: center;"><strong><span
+class="math inline">3748.09 \pm 73.12</span> (agg)</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="current-software-hardware-configuration">6.3 Current Software
+&amp; Hardware Configuration</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Parameter</th>
+<th style="text-align: left;">IBM Spyre AIU Environment</th>
+<th style="text-align: left;">NVIDIA A100 GPU Environment</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><strong>Cluster OS / Version</strong></td>
+<td style="text-align: left;">Red Hat OpenShift Container Platform
+<strong>4.20.36</strong></td>
+<td style="text-align: left;">Red Hat OpenShift Container Platform
+<strong>4.20.36</strong></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Container Base Image</strong></td>
+<td style="text-align: left;"><code>vllm-spyre-nixl-latest:v21</code>
+(also <code>v20</code>)</td>
+<td style="text-align: left;"><code>vllm-openai:v0.6.3</code> /
+<code>vllm:0.28.0</code></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>vLLM Engine Core</strong></td>
+<td style="text-align: left;">vLLM <strong>0.28.0</strong>
+(<code>vllm.platform_plugins.spyre_inference</code>)</td>
+<td style="text-align: left;">vLLM <strong>0.28.0</strong>
+(<code>vllm.platform_plugins.cuda</code>)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>KV Connector Plugin</strong></td>
+<td style="text-align: left;"><code>SpyreNixlConnector</code> (Subclass
+Mixin)</td>
+<td style="text-align: left;"><code>NixlConnector</code> (Standard
+Upstream)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>Model Evaluated</strong></td>
+<td style="text-align: left;"><code>ibm-granite/granite-4.2-8b</code>
+(<span class="math inline">8\text{B}</span>, bfloat16)</td>
+<td style="text-align: left;"><code>ibm-granite/granite-4.2-8b</code>
+(<span class="math inline">8\text{B}</span>, bfloat16)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>PagedAttention Block
+Size</strong></td>
+<td style="text-align: left;"><code>block_size = 64</code> tokens (<span
+class="math inline">10.24\text{ MB}</span> per block)</td>
+<td style="text-align: left;"><code>block_size = 64</code> tokens (<span
+class="math inline">10.24\text{ MB}</span> per block)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>Handshake
+Compatibility</strong></td>
+<td style="text-align: left;">Standard check</td>
+<td
+style="text-align: left;"><code>enforce_handshake_compat: false</code></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>NIXL Library &amp;
+Wheels</strong></td>
+<td style="text-align: left;"><code>nixl</code> <strong>v1.5.0</strong>
+(commit <code>8708e35e</code>, <code>/opt/nixl</code>)</td>
+<td style="text-align: left;"><code>nixl</code> <strong>v1.5.0</strong>
++ <code>nixl-cu12</code> / <code>nixl-cu13</code>
+<strong>v1.5.0</strong></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>UCX Transport Engine</strong></td>
+<td style="text-align: left;">UCX 1.19.0 / 1.23.x (CMA / TCP)</td>
+<td style="text-align: left;">UCX 1.19.0 / 1.23.x (CUDA-IPC / Posix /
+TCP)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Side-Channel Port</strong></td>
+<td style="text-align: left;">5600 (TCP ZeroMQ Listener)</td>
+<td style="text-align: left;">5600 (TCP ZeroMQ Listener)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="todo-additional-performance-measurements">6.4 TODO: Additional
+Performance Measurements</h3>
+<ul class="task-list">
+<li><label><input type="checkbox" /><strong>Multi-Stream Contention
+Profiling on 4P-Hybrid:</strong> Execute microsecond-level NIXL transfer
+tracing while 4 prefill pods concurrently push KV blocks to a single
+A100 decode pod over 100 GbE RoCE.</label></li>
+<li><label><input type="checkbox" /><strong>RoCE v2 Direct Transport vs
+TCP:</strong> Benchmark NIXL inter-node transfers over pure RoCE v2
+(RDMA over Converged Ethernet) compared to TCP overlay
+networking.</label></li>
+<li><label><input type="checkbox" /><strong>Multi-Model
+Scaling:</strong> Extend granular TTFT profiling to 32B models
+(<code>ibm-granite/granite-3.3-32b-instruct</code>) using multi-card
+TP=4 on Spyre and TP=2 on A100.</label></li>
+</ul>
+<hr />
+<h2 id="outstanding-items-future-directions">7. Outstanding Items &amp;
+Future Directions</h2>
+<ol type="1">
+<li><p><strong>Upstreaming <code>SpyreNixlConnector</code> to
+<code>torch-spyre/spyre-inference</code>:</strong> The self-contained
+<code>spyre_connector.py</code> mixin and registration hooks in
+<code>spyre_inference/__init__.py</code> should be permanently merged
+into the upstream <code>torch-spyre/spyre-inference</code> repository to
+eliminate PVC file copying on pod initialization.</p></li>
+<li><p><strong>Unified DRAM Direct Memory Access:</strong> IBM Spyre AIU
+accelerators and the host CPU share unified DDR4 physical address space.
+Future driver enhancements could allow NIXL to register Spyre device
+memory pages directly as DMA targets, eliminating the intermediate host
+staging copy (<code>save_kv_to_host</code> and
+<code>sync_recved_kv_to_device</code>).</p></li>
+<li><p><strong>Descriptor Pre-Allocation &amp; Compact Staging:</strong>
+Current NIXL initialization registers full block capacities (<span
+class="math inline">8,192</span> blocks <span class="math inline">=
+655\text{K}</span> descriptors). A dynamic sliding-window registration
+pattern based on <code>max_num_seqs</code> can further reduce
+initialization time from <span class="math inline">\approx 1\text{
+s}</span> down to <span class="math inline">&lt; 50\text{
+ms}</span>.</p></li>
+<li><p><strong>Multi-Turn KV Cache Reuse in Disaggregated
+Topologies:</strong> Expanding <code>--enable-prefix-caching</code>
+across disaggregated prefill-decode boundaries will allow prefill
+instances to bypass prompt processing for shared system prompts and
+multi-turn conversational history.</p></li>
+</ol>
+<hr />
+<h2 id="problems-encountered-and-resolved">8. Problems Encountered and
+Resolved</h2>
+<h3 id="spyrepagedkvcache-incompatibility-resolved">8.1
+<code>SpyrePagedKVCache</code> Incompatibility (Resolved)</h3>
+<ul>
+<li><strong>Issue:</strong> Upstream
+<code>NixlConnector.register_kv_caches()</code> expected
+<code>torch.Tensor</code> objects with <code>.untyped_storage()</code>.
+IBM Spyre uses <code>SpyrePagedKVCache</code> (a <code>NamedTuple</code>
+containing lists of individually allocated per-block AIU device
+tensors), causing <code>AttributeError</code> and invalid memory type
+registration.</li>
+<li><strong>Resolution:</strong> Added class detection in
+<code>_SpyreRegisterKVCachesMixin.register_kv_caches()</code>,
+pre-allocating contiguous pinned CPU staging tensors
+(<code>staging_k</code>, <code>staging_v</code>) per layer and
+registering them as NIXL <code>DRAM_SEG</code> regions.</li>
+</ul>
+<h3
+id="kv-head-splitting-for-asymmetric-tensor-parallelism-resolved">8.2 KV
+Head Splitting for Asymmetric Tensor Parallelism (Resolved)</h3>
+<ul>
+<li><strong>Issue:</strong> When pairing TP=1 prefill (8 KV heads) with
+TP=2 decode (4 KV heads per worker), descriptor addresses required
+head-slice offsetting.</li>
+<li><strong>Resolution:</strong> Validated that
+<code>_build_fa_remote</code> and <code>TransferTopology</code>
+correctly compute head rank offsets (<span class="math inline">0\text{
+Bytes}</span> for TP0, <span class="math inline">65,536\text{
+Bytes}</span> for TP1) given contiguous per-layer staging buffers.</li>
+</ul>
+<h3 id="keyerror-64-in-pull-worker-descriptor-lookup-resolved">8.3
+<code>KeyError: 64</code> in Pull Worker Descriptor Lookup
+(Resolved)</h3>
+<ul>
+<li><strong>Issue:</strong>
+<code>pull_worker._read_blocks_for_req()</code> failed with
+<code>KeyError: 64</code> when looking up transfer handles indexed by
+block size.</li>
+<li><strong>Resolution:</strong> Registered
+<code>src_xfer_handles_by_block_size[self.block_size] = src_handle</code>
+in the initialization path prior to early exit.</li>
+</ul>
+<h3 id="indexerror-in-_handle_failed_transfer-resolved">8.4
+<code>IndexError</code> in <code>_handle_failed_transfer</code>
+(Resolved)</h3>
+<ul>
+<li><strong>Issue:</strong> Handshake failures occurring prior to block
+assignment accessed <code>meta.local_block_ids[0]</code> unconditionally
+when the list was empty.</li>
+<li><strong>Resolution:</strong> Added
+<code>if meta.local_block_ids:</code> guard before indexing.</li>
+</ul>
+<h3 id="nixl-tcp-deadlock-and-ucx-cma-fix-resolved">8.5 NIXL TCP
+Deadlock and UCX CMA Fix (Resolved)</h3>
+<ul>
+<li><strong>Issue:</strong> In same-node disaggregated pods, UCX
+defaulted to TCP over the pod network interface. Symmetrical descriptor
+exchanges (<span class="math inline">15.7\text{ MB}</span> decode <span
+class="math inline">\leftrightarrow 7.9\text{ MB}</span> prefill) filled
+TCP socket buffers, causing mutual blocking in
+<code>poll(POLLOUT)</code>.</li>
+<li><strong>Resolution:</strong> Configured
+<code>UCX_TLS=cma,sysv,posix,tcp,self</code> and enabled host PID
+namespace sharing, allowing UCX to negotiate zero-copy Linux
+Cross-Memory-Attach (<code>process_vm_readv</code>) which completes in
+<span class="math inline">\approx 1\text{ s}</span>.</li>
+</ul>
+<h3 id="vllm-0.28.0-prefix-caching-signature-breakage-resolved">8.6 vLLM
+0.28.0 Prefix Caching Signature Breakage (Resolved)</h3>
+<ul>
+<li><strong>Issue:</strong> Upstream vLLM 0.28.0 modified keyword
+arguments in
+<code>_apply_prefix_caching(decode_block_ids=..., prefill_block_ids=...)</code>,
+breaking legacy patched files.</li>
+<li><strong>Resolution:</strong> Replaced whole-file replacement of
+<code>base_worker.py</code> with the
+<code>SpyreNixlConnectorWorker</code> subclass, inheriting upstream
+parameter handling while overriding only
+<code>register_kv_caches()</code>.</li>
+</ul>
+<h3 id="isinstance-assertion-failure-bug-resolved-oct-34-2026">8.7
+<code>isinstance</code> Assertion Failure Bug (Resolved Oct 3–4,
+2026)</h3>
+<ul>
+<li><strong>Issue:</strong> The initial subclass implementation
+hot-swapped
+<code>connector_worker.__class__ = SpyreNixlConnectorWorker</code>
+(inheriting from <code>NixlBaseConnectorWorker</code>). Upstream
+<code>NixlPullConnector.start_load_kv()</code> executes
+<code>assert isinstance(self.connector_worker, NixlPullConnectorWorker)</code>,
+causing an immediate <code>AssertionError</code> crash on all incoming
+inference requests.</li>
+<li><strong>Resolution:</strong> Refactored connector hierarchy into
+<code>_SpyreRegisterKVCachesMixin</code> and created explicit subclasses
+<code>SpyreNixlPullConnectorWorker</code> and
+<code>SpyreNixlPushConnectorWorker</code> that satisfy
+<code>isinstance</code> type checks.</li>
+</ul>
+<h3 id="hardware-fault-on-spyre-card-00004100.0-resolved-oct-4-2026">8.8
+Hardware Fault on Spyre Card <code>0000:41:00.0</code> (Resolved Oct 4,
+2026)</h3>
+<ul>
+<li><strong>Issue:</strong> PCI BDF card <code>0000:41:00.0</code> on
+node <code>p1-worker-63</code> consistently generated hardware bus fence
+errors (<code>RAS::PCI::BusFence 0xa35e</code>) during workload
+initialization.</li>
+<li><strong>Resolution:</strong> Identified faulty card by correlating
+<code>spyre-metrics-exporter</code> labels with device-plugin
+allocations, and deployed a dedicated blocker pod
+<code>block-faulty-card-0000-41-00-0</code> holding resource
+<code>ibm.com/spyre_pf_0000_41_00.0: 1</code>, ensuring all inference
+pods allocate only healthy cards (<code>0000:2f:00.0</code>,
+<code>0000:30:00.0</code>, <code>0000:3f:00.0</code>,
+<code>0000:40:00.0</code>).</li>
+</ul>
+<h3
+id="heterogeneous-block-size-compatibility-hash-alignment-resolved-oct-1419-2026">8.9
+Heterogeneous Block Size &amp; Compatibility Hash Alignment (Resolved
+Oct 14–19, 2026)</h3>
+<ul>
+<li><strong>Issue:</strong> Pairing IBM Spyre AIU prefill with NVIDIA
+A100 GPU decode encountered descriptor shape mismatch (Spyre hardware
+fixed page size of 64 tokens vs default GPU block size of 16/128 tokens)
+and SHA-256 handshake compatibility hash mismatch
+(<code>attn_backend_name</code> differences).</li>
+<li><strong>Resolution:</strong> Standardized GPU decode container with
+<code>--block-size=64</code> to match Spyre’s <span
+class="math inline">10.24\text{ MB}</span> block layout, and set
+<code>"enforce_handshake_compat": false</code> in
+<code>kv_connector_extra_config</code> to enable cross-platform metadata
+exchange.</li>
+</ul>
+</body>
+</html>

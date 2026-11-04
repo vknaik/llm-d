@@ -146,7 +146,23 @@ oc exec -n ${NAMESPACE} ${PREFILL_POD} -c modelserver -- \
 
 ---
 
-## 6. Directory Structure
+## 6. Documentation & Architecture Deep Dives
+
+Comprehensive performance benchmarks, architectural specifications, and hybrid setup guides are maintained in [`guides/pd-disaggregation/modelserver/aiu/docs/`](guides/pd-disaggregation/modelserver/aiu/docs/):
+
+1. **[PD Disaggregation Performance Comparison & Analysis](guides/pd-disaggregation/modelserver/aiu/docs/disagg-pd-performance-comparison-analysis.md)**:
+   - Full benchmark results comparing Standalone, TP=1 Disaggregated, TP=2 Disaggregated, and Heterogeneous Hybrid (Spyre Prefill + GPU Decode).
+   - TTFT, ITL, total latency, and throughput scaling analysis across batch sizes 1 to 16.
+2. **[KV Cache Transfer Architecture & Technical Deep Dive](guides/pd-disaggregation/modelserver/aiu/docs/kv-transfer-architecture.md)**:
+   - NIXL v1.5.0 + UCX 1.23 transport architecture, packed HND staging layout (`SPYRE_NIXL_PACKED_KV=1`), 7-stage latency breakdown, and connector mixin design.
+3. **[Heterogeneous Hybrid PD Disaggregation Setup Guide](guides/pd-disaggregation/modelserver/aiu/docs/hybrid-pd-disagg-setup.md)**:
+   - Step-by-step instructions for deploying IBM Spyre AIU Prefill + NVIDIA GPU Decode with llm-d Gateway multi-route routing and EPP.
+4. **[Hybrid PD Disaggregation Cost-Benefit & TCO Analysis](guides/pd-disaggregation/modelserver/aiu/docs/hybrid-pd-cost-benefit-analysis.md)**:
+   - Financial modeling, hardware utilization, energy efficiency, and total cost of ownership (TCO) comparison.
+
+---
+
+## 7. Directory Structure
 
 ```text
 ├── docker/
@@ -158,11 +174,16 @@ oc exec -n ${NAMESPACE} ${PREFILL_POD} -c modelserver -- \
 │   └── pd-disaggregation/
 │       └── modelserver/
 │           └── aiu/
+│               ├── docs/               # Comprehensive performance & architecture documentation
+│               │   ├── disagg-pd-performance-comparison-analysis.md
+│               │   ├── kv-transfer-architecture.md
+│               │   ├── hybrid-pd-disagg-setup.md
+│               │   └── hybrid-pd-cost-benefit-analysis.md
 │               └── vllm/
 │                   ├── base/           # TP=2 Disaggregated PD manifests
 │                   ├── tp1/            # TP=1 Disaggregated PD manifests
 │                   ├── patches/        # Patched connector & bridge sources
-│                   └── scripts/        # Benchmark and startup scripts (batch_stream_timing.py, stream_timing.py, run_vllm_nixl.sh, run_vllm_standalone.sh)
+│                   └── scripts/        # Benchmark and startup scripts
 └── setup/
     └── my-env-aiu-spyre.sh             # Cluster environment setup
 ```
