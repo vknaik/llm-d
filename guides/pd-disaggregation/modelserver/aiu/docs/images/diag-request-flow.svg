@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" width="100%" height="100%" style="background:#ffffff;font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
+  <defs>
+    <filter id="shadow" x="-2%" y="-2%" width="104%" height="106%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="1" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.08"/>
+    </filter>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#0f62fe"/>
+    </marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#007d79"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#8a3ffc"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#198038"/>
+    </marker>
+  </defs>
+
+  <!-- Title Banner -->
+  <text x="30" y="30" font-size="18" font-weight="700" fill="#161616">Disaggregated Request Flow Protocol (2-Phase Coordination)</text>
+  <text x="30" y="50" font-size="12" fill="#525252">End-to-End Orchestration: Ingress Gateway → EPP → routing-proxy → Prefill D2H → NIXL DMA → Decode H2D</text>
+
+  <!-- Box 1: External Client -->
+  <g transform="translate(350, 70)">
+    <rect x="0" y="0" width="300" height="50" rx="6" fill="#f4f4f4" stroke="#8d8d8d" stroke-width="1.2" filter="url(#shadow)"/>
+    <text x="150" y="22" font-size="12" font-weight="700" fill="#161616" text-anchor="middle">External Client (Application / API Client)</text>
+    <text x="150" y="38" font-size="11" fill="#525252" text-anchor="middle">POST /hybrid/v1/completions (model: granite-8b)</text>
+  </g>
+
+  <!-- Arrow Client -> Gateway -->
+  <path d="M 500 120 L 500 145" stroke="#0f62fe" stroke-width="2" marker-end="url(#arrow-blue)"/>
+
+  <!-- Box 2: Istio Ingress Gateway -->
+  <g transform="translate(350, 150)">
+    <rect x="0" y="0" width="300" height="46" rx="6" fill="#edf5ff" stroke="#0f62fe" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="150" y="20" font-size="12" font-weight="700" fill="#0043ce" text-anchor="middle">Istio Ingress Gateway (Port 80)</text>
+    <text x="150" y="36" font-size="10.5" fill="#161616" text-anchor="middle">Matches HTTPRoute /hybrid/v1/... (ClusterIP: 172.30.116.228)</text>
+  </g>
+
+  <!-- Arrow Gateway -> EPP -->
+  <path d="M 500 196 L 500 220" stroke="#0f62fe" stroke-width="2" marker-end="url(#arrow-blue)"/>
+
+  <!-- Box 3: Endpoint Picker (EPP) -->
+  <g transform="translate(310, 225)">
+    <rect x="0" y="0" width="380" height="52" rx="6" fill="#f6f2ff" stroke="#8a3ffc" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="190" y="22" font-size="12" font-weight="700" fill="#6929c4" text-anchor="middle">Endpoint Picker (EPP: v0.11.0)</text>
+    <text x="190" y="40" font-size="10.5" fill="#393939" text-anchor="middle">Selects Least-Loaded Prefill Worker (P1..P4) | Injects <tspan font-weight="600">x-prefiller-host-port</tspan></text>
+  </g>
+
+  <!-- Arrow EPP -> Decode Pod Proxy -->
+  <path d="M 500 277 L 500 300" stroke="#0f62fe" stroke-width="2" marker-end="url(#arrow-blue)"/>
+
+  <!-- Box 4: Decode Pod (routing-proxy) -->
+  <g transform="translate(300, 305)">
+    <rect x="0" y="0" width="400" height="58" rx="6" fill="#f0f5ff" stroke="#0f62fe" stroke-width="2" filter="url(#shadow)"/>
+    <text x="200" y="22" font-size="12.5" font-weight="700" fill="#0043ce" text-anchor="middle">Decode Pod — routing-proxy (Port 8000)</text>
+    <text x="200" y="42" font-size="10.5" fill="#161616" text-anchor="middle">Inspects EPP Header → Splits into Phase 1 (Prefill) &amp; Phase 2 (Decode)</text>
+  </g>
+
+  <!-- Phase 1 Left Dispatch Arrow -->
+  <path d="M 320 363 L 180 395" fill="none" stroke="#007d79" stroke-width="2" marker-end="url(#arrow-teal)"/>
+  <rect x="150" y="365" width="160" height="20" rx="3" fill="#ffffff" stroke="#007d79" stroke-width="0.8"/>
+  <text x="230" y="379" font-size="9.5" font-weight="600" fill="#007d79" text-anchor="middle">Phase 1: POST to Prefill (:8000)</text>
+
+  <!-- Phase 2 Right Dispatch Arrow -->
+  <path d="M 680 363 L 820 395" fill="none" stroke="#0043ce" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <rect x="690" y="365" width="160" height="20" rx="3" fill="#ffffff" stroke="#0043ce" stroke-width="0.8"/>
+  <text x="770" y="379" font-size="9.5" font-weight="600" fill="#0043ce" text-anchor="middle">Phase 2: POST to Decode (:8001)</text>
+
+  <!-- PREFILL WORKER BOX (Left Column) -->
+  <g transform="translate(30, 400)">
+    <rect x="0" y="0" width="400" height="200" rx="8" fill="#f2f9f7" stroke="#007d79" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect x="0" y="0" width="400" height="28" rx="8" fill="#007d79"/>
+    <rect x="0" y="16" width="400" height="12" fill="#007d79"/>
+    <text x="14" y="19" font-size="12" font-weight="700" fill="#ffffff">Spyre Prefill Worker (P_i) — Port 8000</text>
+    <text x="290" y="19" font-size="10.5" fill="#cbf4e8">TP=1 (75W AIU)</text>
+
+    <g transform="translate(14, 38)">
+      <circle cx="8" cy="10" r="8" fill="#007d79"/>
+      <text x="8" y="14" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">1</text>
+      <text x="24" y="14" font-size="11" font-weight="600" fill="#161616">Forward pass on Spyre AIU (SENDNN Graph)</text>
+
+      <circle cx="8" cy="38" r="8" fill="#007d79"/>
+      <text x="8" y="42" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+      <text x="24" y="42" font-size="11" font-weight="600" fill="#005d5d">D2H Staging: AIU DRAM → Pinned Host Memory</text>
+      <text x="24" y="56" font-size="10" fill="#525252">save_kv_to_host() writes (num_blocks, 8, 64, 128)</text>
+
+      <circle cx="8" cy="80" r="8" fill="#007d79"/>
+      <text x="8" y="84" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">3</text>
+      <text x="24" y="84" font-size="11" font-weight="600" fill="#161616">Returns HTTP 200 JSON with KVTransferParams:</text>
+      <text x="24" y="98" font-size="10" fill="#393939">• remote_engine_id: UUID</text>
+      <text x="24" y="112" font-size="10" fill="#393939">• remote_block_ids: [[1, 2, ...]]</text>
+      <text x="24" y="126" font-size="10" fill="#393939">• remote_host: 10.130.2.x | remote_port: 5600</text>
+      <text x="24" y="140" font-size="10" fill="#007d79" font-weight="600">• Fast Latency: 210 ms (ISL=16) / 1.42 s (ISL=200)</text>
+    </g>
+  </g>
+
+  <!-- METADATA HANDOFF ARROW (Prefill -> Decode Modelserver) -->
+  <g transform="translate(435, 470)">
+    <path d="M 0 20 L 125 20" stroke="#8a3ffc" stroke-width="2" marker-end="url(#arrow-purple)"/>
+    <rect x="10" y="-8" width="105" height="22" rx="3" fill="#ffffff" stroke="#8a3ffc" stroke-width="1" filter="url(#shadow)"/>
+    <text x="62" y="7" font-size="9.5" font-weight="700" fill="#6929c4" text-anchor="middle">HTTP 200 JSON</text>
+    <text x="62" y="34" font-size="8.5" fill="#525252" text-anchor="middle">kv_transfer_params</text>
+  </g>
+
+  <!-- DECODE MODELSERVER BOX (Right Column) -->
+  <g transform="translate(570, 400)">
+    <rect x="0" y="0" width="400" height="200" rx="8" fill="#f8fafd" stroke="#0043ce" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect x="0" y="0" width="400" height="28" rx="8" fill="#0043ce"/>
+    <rect x="0" y="16" width="400" height="12" fill="#0043ce"/>
+    <text x="14" y="19" font-size="12" font-weight="700" fill="#ffffff">Decode Modelserver (GPU / Spyre) — Port 8001</text>
+    <text x="290" y="19" font-size="10.5" fill="#d0e2ff">A100 GPU / Spyre</text>
+
+    <g transform="translate(14, 38)">
+      <circle cx="8" cy="10" r="8" fill="#0043ce"/>
+      <text x="8" y="14" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">4</text>
+      <text x="24" y="14" font-size="11" font-weight="600" fill="#161616">NIXL Handshake on TCP Port 5600</text>
+      <text x="24" y="28" font-size="10" fill="#525252">Exchanges agent layout &amp; memory descriptors</text>
+
+      <circle cx="8" cy="52" r="8" fill="#0043ce"/>
+      <text x="8" y="56" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">5</text>
+      <text x="24" y="56" font-size="11" font-weight="600" fill="#6929c4">NIXL READ: Fetch KV Blocks via UCX Transport</text>
+      <text x="24" y="70" font-size="10" fill="#525252">Async DMA read into local host staging memory</text>
+
+      <circle cx="8" cy="94" r="8" fill="#0043ce"/>
+      <text x="8" y="98" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">6</text>
+      <text x="24" y="98" font-size="11" font-weight="600" fill="#002d9c">H2D Ingestion: Host Staging → Device VRAM</text>
+
+      <circle cx="8" cy="122" r="8" fill="#198038"/>
+      <text x="8" y="126" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">7</text>
+      <text x="24" y="126" font-size="11" font-weight="700" fill="#198038">Autoregressive Token Generation (Decode Loop)</text>
+      <text x="24" y="140" font-size="10" fill="#198038">Streams tokens (A100: ~80 tok/s | Spyre: ~7.2 tok/s)</text>
+    </g>
+  </g>
+</svg>

@@ -49,58 +49,17 @@ In this implementation, KV cache transfer uses **NIXL (Non-contiguous KV-cache I
 
 In the homogeneous configuration (namespace `llm-d-on-aiu`), both prefill and decode pods reside on IBM Spyre AIU worker nodes (`p1-worker-63` or `p1-worker-69`). Inter-pod KV transfer leverages Linux Cross-Memory-Attach (CMA) via `process_vm_readv` for zero-network same-node transfers, or UCX TCP:
 
-```
-OpenShift Node: p1-worker-63 / p1-worker-69 (Namespace: llm-d-on-aiu)
-+----------------------------------------------------------------------------------------+
-|                                                                                        |
-|  Decode Pod (2/2 Ready)                                Prefill Pod (1/1 Ready)         |
-|  IP: 10.130.2.28 (Node 63) / 10.131.2.49 (Node 69)     IP: 10.130.2.29 / 10.131.2.50   |
-|  +---------------------------------+                   +-----------------------------+ |
-|  | Container: routing-proxy        |                   | Container: modelserver      | |
-|  | Port: 8000 (external ingress)   |                   | Port: 8000 (Phase 1)        | |
-|  | KVConnector: SpyreNixlConnector |                   | TP=1, 1x IBM Spyre AIU      | |
-|  | Forwards Phase 2 to :8001       |                   | NIXL side-channel: 5600     | |
-|  +---------------------------------+                   +--------------+--------------+ |
-|  | Container: modelserver          |                                  |                |
-|  | Port: 8001 (internal decode)    |<---------------------------------+                |
-|  | TP=1 (1 AIU) or TP=2 (2 AIUs)   |   UCX Transport (CMA process_vm_readv / TCP)      |
-|  | NIXL side-channel: 5600         |   D2H -> Host DRAM -> H2D                         |
-|  +---------------------------------+                                                   |
-|                                                                                        |
-+----------------------------------------------------------------------------------------+
-```
+<p align="center">
+  <img src="images/diag-homogeneous-pod-layout.svg" alt="Homogeneous Prefill-Decode Disaggregation Pod Layout" width="100%" />
+</p>
 
 #### (b) Heterogeneous Hybrid Prefill-Decode Disaggregation (Spyre AIU $\to$ NVIDIA A100 GPU)
 
 In the heterogeneous hybrid configuration (namespace `llm-d-on-gpu`), prefill requests are processed across 1, 2, or 4 IBM Spyre AIU worker pods on node `p1-worker-63` or `p1-worker-69`, while token decode runs on a dedicated NVIDIA A100-PCIE-80GB GPU on node `p1-gpu-worker-1`. NIXL transfers KV blocks across physical nodes via UCX TCP over OpenShift SDN pod networking:
 
-```
-OpenShift Cluster: llm-d.spyre (Namespace: llm-d-on-gpu)
-+----------------------------------------------+       +----------------------------------------------+
-| Prefill Tier: Node p1-worker-63              |       | Decode Tier: Node p1-gpu-worker-1            |
-| (1x, 2x, or 4x IBM Spyre AIU Replicas)       |       | (Dedicated NVIDIA A100-PCIE-80GB GPU)        |
-|                                              |       |                                              |
-| +------------------------------------------+ |       | +------------------------------------------+ |
-| | Pod: pd-disagg-hybrid-spyre-prefill-P1   | |       | | Pod: pd-disagg-hybrid-nvidia-gpu-decode  | |
-| | IP: 10.130.2.55 | AIU Card 2f:00.0 (75W) | |       | | IP: 10.128.4.127 | NVIDIA A100 GPU 2     | |
-| | TP=1, vLLM 0.28.0 (Spyre Plugin)         | |       | |                                          | |
-| | NIXL side-channel: 5600                  | |       | | +--------------------------------------+ | |
-| +--------------------+---------------------+ |       | | | Container: routing-proxy (Port 8000) | | |
-|                      |                       |       | | | Ingress, EPP load dispatch           | | |
-| +--------------------+---------------------+ |       | | +--------------------------------------+ | |
-| | Pod: pd-disagg-hybrid-spyre-prefill-P2   | |       | | | Container: modelserver (Port 8001)   | | |
-| | IP: 10.130.2.72 | AIU Card 30:00.0 (75W) | |       | | | TP=1, vLLM 0.28.0 (CUDA Plugin)      | | |
-| | TP=1, vLLM 0.28.0 (Spyre Plugin)         | |       | | | --block-size=64                      | | |
-| | NIXL side-channel: 5600                  | |       | | | enforce_handshake_compat: false      | | |
-| +--------------------+---------------------+ |       | | | NIXL side-channel: 5600              | | |
-|                      |                       |       | | +------------------^-------------------+ | |
-|                      |                       |       | +--------------------+---------------------+ |
-+----------------------+-----------------------+       +----------------------+-----------------------+
-                       |                                                      |
-                       +--------------- Cross-Node UCX TCP Interconnect ------+
-                                        (OpenShift 100 GbE RoCE / TCP Network)
-                                        D2H (Spyre) -> CPU Staging -> UCX TCP -> H2D (GPU VRAM)
-```
+<p align="center">
+  <img src="images/diag-heterogeneous-pod-layout.svg" alt="Heterogeneous Hybrid Prefill-Decode Disaggregation Pod Layout" width="100%" />
+</p>
 
 ---
 
@@ -110,59 +69,18 @@ OpenShift Cluster: llm-d.spyre (Namespace: llm-d-on-gpu)
 
 External clients connect through the Istio Ingress Gateway (`172.30.116.228:80`), which evaluates HTTPRoutes and delegates request scheduling to the Endpoint Picker (EPP):
 
-```
-External Client
-      |
-      v
-Istio Ingress Gateway (Port 80)
-      |
-      +---> HTTPRoute: /tp1/v1/completions ----> EPP --> Spyre TP=1 Disaggregated Pool (Node 63)
-      +---> HTTPRoute: /v1/completions --------> EPP --> Spyre TP=2 Disaggregated Pool (Node 69)
-      +---> HTTPRoute: /hybrid/v1/completions --> EPP --> Hybrid (1P/2P/4P Spyre + 1D GPU) Pool
-      +---> HTTPRoute: /gpu/v1/completions ----> EPP --> Homogeneous A100 GPU Pool (Node GPU-1)
-```
+<p align="center">
+  <img src="images/diag-gateway-routing.svg" alt="Multi-Route Ingress and Gateway Architecture" width="95%" />
+</p>
 
 When a request arrives at the target decode pod's `routing-proxy` (port 8000):
 1. **Header Inspection:** The routing-proxy inspects the `x-prefiller-host-port` header injected by EPP.
 2. **Phase 1 (Prefill Dispatch):** The proxy forwards the prompt to the designated prefill pod at port 8000 with `max_tokens=1` and `do_remote_decode=true`.
 3. **Phase 2 (Decode Dispatch):** Upon receiving `kv_transfer_params` from Phase 1, the proxy issues an internal HTTP request to the local decode engine at port 8001 with `do_remote_prefill=true` and the full token budget.
 
-```
-                  +----------------------------------------------+
-                  |              External Client                 |
-                  +----------------------+-----------------------+
-                                         | POST /hybrid/v1/completions
-                                         v
-                  +----------------------------------------------+
-                  |            Istio Ingress Gateway             |
-                  +----------------------+-----------------------+
-                                         |
-                                         v
-                  +----------------------------------------------+
-                  |          Endpoint Picker (EPP)               |
-                  |   Selects Prefill Worker (P1..P4) via LLR    |
-                  +----------------------+-----------------------+
-                                         | Injects x-prefiller-host-port
-                                         v
-                  +----------------------------------------------+
-                  |      Decode Pod (routing-proxy :8000)        |
-                  +--------------+-------------------------------+
-                                 |
-        +------------------------+------------------------+
-        | Phase 1: POST to Prefill Pod (:8000)            | Phase 2: POST to Decode Modelserver (:8001)
-        v                                                 v
-+------------------------------+                  +---------------------------------------------+
-|  Spyre Prefill Worker (P_i)  |                  |       Decode Modelserver (Port 8001)        |
-|                              |                  |                                             |
-| 1. Forward pass on AIU       |                  | 4. NIXL Handshake (Port 5600)               |
-| 2. D2H: AIU DRAM -> Host     |                  | 5. NIXL READ: Fetch KV Blocks via UCX       |
-| 3. Return KVTransferParams   |----------------->| 6. H2D: Host Staging -> Device Memory      |
-|    (engine_id, blocks, host) |  HTTP 200 JSON   | 7. Autoregressive Token Generation (Decode) |
-+------------------------------+                  +----------------------+----------------------+
-                                                                         |
-                                                                         v
-                                                          Streaming Response to Client
-```
+<p align="center">
+  <img src="images/diag-request-flow.svg" alt="Disaggregated Request Flow Protocol" width="100%" />
+</p>
 
 ---
 
@@ -278,24 +196,9 @@ Staging Tensor Structure per Worker:
 
 ### 4.3 NIXL Handshake & Protocol
 
-```
-Decode Worker (PID d_worker)             Prefill Worker (PID p_worker)
-      |                                                |
-      |-- TCP Connect to Port 5600 ------------------->|
-      |<- NixlHandshakePayload (Metadata + Descs) -----|
-      |                                                |
-      |-- Verify Dimensions & Staging Strides -------->|
-      |-- nixl_wrapper.add_remote_agent() ------------>|
-      |   +- Build Remote Descriptors (prep_xfer_dlist)|
-      |   +- Establish UCX Channel (CMA / TCP) ------->|
-      |                                                |
-Per Request:                                           |
-      |-- nixl_wrapper.transfer("READ", block_ids) --->| (Async DMA Read)
-      |<-- UCX Transfer Completed (DONE) --------------|
-      |                                                |
-      |-- sync_recved_kv_to_device() (H2D Copy) -------|
-      |-- Autoregressive Decode Step 1 ----------------|
-```
+<p align="center">
+  <img src="images/diag-nixl-handshake.svg" alt="NIXL Handshake and Protocol" width="95%" />
+</p>
 
 ---
 
@@ -303,16 +206,9 @@ Per Request:                                           |
 
 When prefill runs at $\text{TP}=1$ (8 KV heads staged together) and decode runs at $\text{TP}=2$ (4 KV heads per card), NIXL computes rank-specific byte offsets into the prefill staging buffer:
 
-```
-Prefill TP=1 Staging Buffer (8 KV Heads per Layer):
-+--------------------------------------+--------------------------------------+
-|  Heads 0 .. 3 (65,536 Bytes / Block) |  Heads 4 .. 7 (65,536 Bytes / Block) |
-+------------------+-------------------+------------------+-------------------+
-                   |                                      |
-                   v                                      v
-        Decode TP Rank 0 (Heads 0..3)          Decode TP Rank 1 (Heads 4..7)
-        Offset: 0 Bytes                        Offset: 65,536 Bytes
-```
+<p align="center">
+  <img src="images/diag-tp-head-splitting.svg" alt="TP Head Splitting and Memory Offset Layout" width="95%" />
+</p>
 
 ---
 

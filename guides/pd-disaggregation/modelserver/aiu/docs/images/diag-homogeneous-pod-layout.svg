@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" width="100%" height="100%" style="background:#ffffff;font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
+  <defs>
+    <filter id="shadow" x="-2%" y="-2%" width="104%" height="106%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="1" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.08"/>
+    </filter>
+    <linearGradient id="nodeGrad" x1="0" y1="0" x2="0" y2="1">
+      <feStop offset="0%" stop-color="#f4f7fb"/>
+      <feStop offset="100%" stop-color="#e8f0f8"/>
+    </linearGradient>
+    <linearGradient id="podDecodeGrad" x1="0" y1="0" x2="0" y2="1">
+      <feStop offset="0%" stop-color="#ffffff"/>
+      <feStop offset="100%" stop-color="#f0f5ff"/>
+    </linearGradient>
+    <linearGradient id="podPrefillGrad" x1="0" y1="0" x2="0" y2="1">
+      <feStop offset="0%" stop-color="#ffffff"/>
+      <feStop offset="100%" stop-color="#eaf5f2"/>
+    </linearGradient>
+    <linearGradient id="cRoutingGrad" x1="0" y1="0" x2="1" y2="1">
+      <feStop offset="0%" stop-color="#0f62fe"/>
+      <feStop offset="100%" stop-color="#0043ce"/>
+    </linearGradient>
+    <linearGradient id="cModelGrad" x1="0" y1="0" x2="1" y2="1">
+      <feStop offset="0%" stop-color="#0072c3"/>
+      <feStop offset="100%" stop-color="#114e9f"/>
+    </linearGradient>
+    <linearGradient id="cPrefillGrad" x1="0" y1="0" x2="1" y2="1">
+      <feStop offset="0%" stop-color="#007d79"/>
+      <feStop offset="100%" stop-color="#005d5d"/>
+    </linearGradient>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#0f62fe"/>
+    </marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#007d79"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#8a3ffc"/>
+    </marker>
+  </defs>
+
+  <!-- Title & Environment Banner -->
+  <text x="30" y="32" font-size="18" font-weight="700" fill="#161616">Homogeneous Prefill-Decode Disaggregation (Spyre AIU → Spyre AIU)</text>
+  <text x="30" y="52" font-size="12" fill="#525252">Topology: OpenShift Node p1-worker-63 / p1-worker-69 | Namespace: llm-d-on-aiu | Model: granite-8b</text>
+
+  <!-- Node Enclosure -->
+  <rect x="25" y="65" width="910" height="395" rx="10" fill="url(#nodeGrad)" stroke="#c1d1e8" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="25" y="65" width="910" height="32" rx="10" fill="#24385a"/>
+  <!-- Hide bottom rounded corners of the node header -->
+  <rect x="25" y="82" width="910" height="15" fill="#24385a"/>
+  <text x="45" y="86" font-size="13" font-weight="600" fill="#ffffff">OpenShift AIU Node: p1-worker-63 / p1-worker-69 (Dual Spyre PCIe Accelerators)</text>
+
+  <!-- DECODE POD -->
+  <g transform="translate(50, 115)">
+    <rect x="0" y="0" width="390" height="320" rx="8" fill="url(#podDecodeGrad)" stroke="#a6c8ff" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect x="0" y="0" width="390" height="30" rx="8" fill="#0f62fe"/>
+    <rect x="0" y="18" width="390" height="12" fill="#0f62fe"/>
+    <text x="14" y="20" font-size="13" font-weight="600" fill="#ffffff">Decode Pod (2/2 Ready)</text>
+    <text x="210" y="20" font-size="11" fill="#d0e2ff">IP: 10.130.2.28 / 10.131.2.49</text>
+
+    <!-- Container 1: routing-proxy -->
+    <g transform="translate(15, 45)">
+      <rect x="0" y="0" width="360" height="110" rx="6" fill="#f8fafd" stroke="#78a9ff" stroke-width="1.2"/>
+      <rect x="0" y="0" width="360" height="24" rx="6" fill="#edf5ff"/>
+      <rect x="0" y="14" width="360" height="10" fill="#edf5ff"/>
+      <text x="10" y="16" font-size="12" font-weight="700" fill="#0043ce">Container: routing-proxy (Sidecar)</text>
+      <text x="250" y="16" font-size="11" font-weight="600" fill="#0f62fe">Port: 8000</text>
+      
+      <text x="12" y="42" font-size="11" fill="#393939">• Ingress Gateway Entrypoint (HTTP POST)</text>
+      <text x="12" y="60" font-size="11" fill="#393939">• Phase 1 Coordinator: Calls Prefill Pod (:8000)</text>
+      <text x="12" y="78" font-size="11" fill="#393939">• Phase 2 Dispatch: Forwards with <tspan font-weight="600" fill="#0f62fe">kv_transfer_params</tspan></text>
+      <text x="12" y="96" font-size="11" fill="#393939">• Connector Plugin: <tspan font-weight="600" fill="#114e9f">SpyreNixlConnector</tspan></text>
+    </g>
+
+    <!-- Internal Dispatch Arrow -->
+    <path d="M 195 160 L 195 180" stroke="#0f62fe" stroke-width="2" stroke-dasharray="3,3" marker-end="url(#arrow-blue)"/>
+    <text x="205" y="174" font-size="10" font-weight="600" fill="#0f62fe">Phase 2 Dispatch (:8001)</text>
+
+    <!-- Container 2: modelserver (Decode) -->
+    <g transform="translate(15, 185)">
+      <rect x="0" y="0" width="360" height="120" rx="6" fill="#f8fafd" stroke="#0043ce" stroke-width="1.5"/>
+      <rect x="0" y="0" width="360" height="24" rx="6" fill="#d0e2ff"/>
+      <rect x="0" y="14" width="360" height="10" fill="#d0e2ff"/>
+      <text x="10" y="16" font-size="12" font-weight="700" fill="#002d9c">Container: modelserver (Decode Engine)</text>
+      <text x="250" y="16" font-size="11" font-weight="600" fill="#0043ce">Port: 8001</text>
+      
+      <text x="12" y="42" font-size="11" fill="#161616">• vLLM 0.28.0 + PyTorch SENDNN Static Graph</text>
+      <text x="12" y="60" font-size="11" fill="#161616">• Parallelism: <tspan font-weight="700" fill="#0f62fe">TP=1 (1 AIU)</tspan> or <tspan font-weight="700" fill="#0043ce">TP=2 (2 AIUs)</tspan></text>
+      <text x="12" y="78" font-size="11" fill="#161616">• NIXL Side-Channel: <tspan font-weight="600">Port 5600</tspan> (Pulls KV Blocks)</text>
+      <text x="12" y="96" font-size="11" fill="#161616">• Memory Copy: <tspan font-weight="600" fill="#007d79">Host Staging → Spyre DRAM (H2D)</tspan></text>
+      <text x="12" y="112" font-size="11" fill="#525252">• Autoregressive Decode: ~7.2 tok/s per stream</text>
+    </g>
+  </g>
+
+  <!-- PREFILL POD -->
+  <g transform="translate(520, 115)">
+    <rect x="0" y="0" width="385" height="320" rx="8" fill="url(#podPrefillGrad)" stroke="#6fdc8c" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect x="0" y="0" width="385" height="30" rx="8" fill="#007d79"/>
+    <rect x="0" y="18" width="385" height="12" fill="#007d79"/>
+    <text x="14" y="20" font-size="13" font-weight="600" fill="#ffffff">Prefill Pod (1/1 Ready)</text>
+    <text x="210" y="20" font-size="11" fill="#cbf4e8">IP: 10.130.2.29 / 10.131.2.50</text>
+
+    <!-- Container: modelserver (Prefill) -->
+    <g transform="translate(15, 45)">
+      <rect x="0" y="0" width="355" height="260" rx="6" fill="#f4faf8" stroke="#007d79" stroke-width="1.2"/>
+      <rect x="0" y="0" width="355" height="24" rx="6" fill="#cbf4e8"/>
+      <rect x="0" y="14" width="355" height="10" fill="#cbf4e8"/>
+      <text x="10" y="16" font-size="12" font-weight="700" fill="#004d4a">Container: modelserver (Prefill Engine)</text>
+      <text x="250" y="16" font-size="11" font-weight="600" fill="#007d79">Port: 8000</text>
+      
+      <text x="12" y="44" font-size="11" fill="#161616">• Receives Phase 1 Prompt from routing-proxy</text>
+      <text x="12" y="64" font-size="11" fill="#161616">• Parallelism: <tspan font-weight="700" fill="#007d79">TP=1 (1x IBM Spyre AIU, 75W TDP)</tspan></text>
+      <text x="12" y="84" font-size="11" fill="#161616">• Generates Prompt Attention on AIU HW</text>
+      
+      <!-- Box for D2H Staging -->
+      <rect x="12" y="100" width="331" height="65" rx="4" fill="#ffffff" stroke="#9ef0f0" stroke-width="1"/>
+      <text x="20" y="118" font-size="11" font-weight="700" fill="#005d5d">D2H Memory Staging (save_kv_to_host):</text>
+      <text x="20" y="136" font-size="10.5" fill="#393939">Copies allocated blocks from AIU DRAM to pinned</text>
+      <text x="20" y="152" font-size="10.5" fill="#393939">CPU host memory: (num_blocks, 8, 64, 128)</text>
+
+      <text x="12" y="186" font-size="11" fill="#161616">• NIXL Registration: Registers CPU buffers with NIXL</text>
+      <text x="12" y="206" font-size="11" fill="#161616">• NIXL Side-Channel: <tspan font-weight="600">Port 5600</tspan> (Serves KV DMA)</text>
+      <text x="12" y="226" font-size="11" fill="#161616">• Returns: <tspan font-weight="600" fill="#0f62fe">remote_engine_id, remote_block_ids</tspan></text>
+      <text x="12" y="246" font-size="11" fill="#525252">• Fast TTFT: ~210 ms (ISL=16) / ~1.4 s (ISL=200)</text>
+    </g>
+  </g>
+
+  <!-- INTERCONNECT ARROW (CMA / TCP Transfer) -->
+  <g transform="translate(440, 240)">
+    <path d="M 95 60 L 5 60" stroke="#8a3ffc" stroke-width="2.5" marker-end="url(#arrow-purple)"/>
+    <path d="M 5 10 L 95 10" stroke="#0f62fe" stroke-width="1.8" stroke-dasharray="4,4" marker-end="url(#arrow-blue)"/>
+    
+    <rect x="-15" y="-12" width="110" height="20" rx="3" fill="#ffffff" stroke="#0f62fe" stroke-width="0.8"/>
+    <text x="40" y="2" font-size="10" font-weight="600" fill="#0f62fe" text-anchor="middle">Phase 1 Prompt</text>
+
+    <rect x="-35" y="32" width="150" height="42" rx="4" fill="#ffffff" stroke="#8a3ffc" stroke-width="1" filter="url(#shadow)"/>
+    <text x="40" y="47" font-size="10.5" font-weight="700" fill="#6929c4" text-anchor="middle">UCX Transport Layer</text>
+    <text x="40" y="60" font-size="9.5" fill="#393939" text-anchor="middle">CMA process_vm_readv / TCP</text>
+    <text x="40" y="71" font-size="9" font-weight="600" fill="#007d79" text-anchor="middle">D2H → Host DRAM → H2D</text>
+  </g>
+</svg>

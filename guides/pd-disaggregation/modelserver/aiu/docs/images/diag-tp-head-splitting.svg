@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 440" width="100%" height="100%" style="background:#ffffff;font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
+  <defs>
+    <filter id="shadow" x="-2%" y="-2%" width="104%" height="106%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="1" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.08"/>
+    </filter>
+    <linearGradient id="pGrad" x1="0" y1="0" x2="0" y2="1">
+      <feStop offset="0%" stop-color="#f2f9f7"/>
+      <feStop offset="100%" stop-color="#e2f3ee"/>
+    </linearGradient>
+    <linearGradient id="dGrad0" x1="0" y1="0" x2="0" y2="1">
+      <feStop offset="0%" stop-color="#edf5ff"/>
+      <feStop offset="100%" stop-color="#d0e2ff"/>
+    </linearGradient>
+    <linearGradient id="dGrad1" x1="0" y1="0" x2="0" y2="1">
+      <feStop offset="0%" stop-color="#f6f2ff"/>
+      <feStop offset="100%" stop-color="#e8daff"/>
+    </linearGradient>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#0f62fe"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#8a3ffc"/>
+    </marker>
+  </defs>
+
+  <!-- Title Banner -->
+  <text x="30" y="30" font-size="18" font-weight="700" fill="#161616">TP Head Splitting &amp; Memory Offset Mapping (TP=1 Prefill → TP=2 Decode)</text>
+  <text x="30" y="50" font-size="12" fill="#525252">Architecture: NIXL Descriptor Sub-Slicing across Tensor Parallel Ranks without CPU Data Restructuring</text>
+
+  <!-- PREFILL BUFFER CONTAINER -->
+  <g transform="translate(30, 80)">
+    <rect x="0" y="0" width="860" height="150" rx="8" fill="url(#pGrad)" stroke="#007d79" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect x="0" y="0" width="860" height="30" rx="8" fill="#007d79"/>
+    <rect x="0" y="18" width="860" height="12" fill="#007d79"/>
+    <text x="16" y="20" font-size="13" font-weight="700" fill="#ffffff">Prefill TP=1 Staging Buffer (8 KV Heads per Layer | 131,072 Bytes per Block for K or V)</text>
+    <text x="650" y="20" font-size="11" fill="#cbf4e8">Shape: (num_blocks, 8, 64, 128) bfloat16</text>
+
+    <!-- Head Block 0..3 -->
+    <g transform="translate(20, 45)">
+      <rect x="0" y="0" width="395" height="85" rx="6" fill="#ffffff" stroke="#007d79" stroke-width="1.2"/>
+      <text x="14" y="24" font-size="13" font-weight="700" fill="#005d5d">Heads 0 .. 3 (4 Heads × 64 Tokens × 128 Dims × 2 Bytes)</text>
+      <text x="14" y="44" font-size="12" font-weight="600" fill="#0f62fe">Block Slice Size: 65,536 Bytes / Block</text>
+      <text x="14" y="64" font-size="11" fill="#525252">Assigned to Decode TP Rank 0 (PCIe Card A)</text>
+      <rect x="290" y="40" width="90" height="28" rx="4" fill="#edf5ff" stroke="#0f62fe" stroke-width="1"/>
+      <text x="335" y="58" font-size="11" font-weight="700" fill="#0043ce" text-anchor="middle">Offset: 0 B</text>
+    </g>
+
+    <!-- Head Block 4..7 -->
+    <g transform="translate(445, 45)">
+      <rect x="0" y="0" width="395" height="85" rx="6" fill="#ffffff" stroke="#007d79" stroke-width="1.2"/>
+      <text x="14" y="24" font-size="13" font-weight="700" fill="#005d5d">Heads 4 .. 7 (4 Heads × 64 Tokens × 128 Dims × 2 Bytes)</text>
+      <text x="14" y="44" font-size="12" font-weight="600" fill="#8a3ffc">Block Slice Size: 65,536 Bytes / Block</text>
+      <text x="14" y="64" font-size="11" fill="#525252">Assigned to Decode TP Rank 1 (PCIe Card B)</text>
+      <rect x="270" y="40" width="110" height="28" rx="4" fill="#f6f2ff" stroke="#8a3ffc" stroke-width="1"/>
+      <text x="325" y="58" font-size="11" font-weight="700" fill="#6929c4" text-anchor="middle">Offset: 65,536 B</text>
+    </g>
+  </g>
+
+  <!-- Mapping Arrows -->
+  <path d="M 245 230 L 245 270" stroke="#0f62fe" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+  <path d="M 670 230 L 670 270" stroke="#8a3ffc" stroke-width="2.5" marker-end="url(#arrow-purple)"/>
+
+  <!-- DECODE TARGET BOXES -->
+  <!-- Decode TP Rank 0 -->
+  <g transform="translate(50, 275)">
+    <rect x="0" y="0" width="390" height="135" rx="8" fill="url(#dGrad0)" stroke="#0f62fe" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect x="0" y="0" width="390" height="28" rx="8" fill="#0f62fe"/>
+    <rect x="0" y="16" width="390" height="12" fill="#0f62fe"/>
+    <text x="14" y="19" font-size="12.5" font-weight="700" fill="#ffffff">Decode TP Rank 0 (Heads 0 .. 3)</text>
+    <text x="280" y="19" font-size="11" fill="#d0e2ff">AIU Card / GPU</text>
+
+    <text x="16" y="48" font-size="11" fill="#161616">• NIXL Descriptor Base Offset: <tspan font-weight="700" fill="#0043ce">0 Bytes</tspan></text>
+    <text x="16" y="68" font-size="11" fill="#161616">• Stride: 131,072 Bytes between successive blocks</text>
+    <text x="16" y="88" font-size="11" fill="#161616">• Device Ingestion: <tspan font-weight="600">sync_recved_kv_to_device()</tspan> (H2D)</text>
+    <text x="16" y="108" font-size="11" fill="#161616">• Computes self-attention on Attention Heads 0..3</text>
+    <text x="16" y="124" font-size="10" fill="#525252">• GQA Group: First 4 query heads mapped to KV heads 0..3</text>
+  </g>
+
+  <!-- Decode TP Rank 1 -->
+  <g transform="translate(480, 275)">
+    <rect x="0" y="0" width="390" height="135" rx="8" fill="url(#dGrad1)" stroke="#8a3ffc" stroke-width="1.5" filter="url(#shadow)"/>
+    <rect x="0" y="0" width="390" height="28" rx="8" fill="#8a3ffc"/>
+    <rect x="0" y="16" width="390" height="12" fill="#8a3ffc"/>
+    <text x="14" y="19" font-size="12.5" font-weight="700" fill="#ffffff">Decode TP Rank 1 (Heads 4 .. 7)</text>
+    <text x="280" y="19" font-size="11" fill="#f1e8ff">AIU Card / GPU</text>
+
+    <text x="16" y="48" font-size="11" fill="#161616">• NIXL Descriptor Base Offset: <tspan font-weight="700" fill="#6929c4">+65,536 Bytes</tspan></text>
+    <text x="16" y="68" font-size="11" fill="#161616">• Stride: 131,072 Bytes between successive blocks</text>
+    <text x="16" y="88" font-size="11" fill="#161616">• Device Ingestion: <tspan font-weight="600">sync_recved_kv_to_device()</tspan> (H2D)</text>
+    <text x="16" y="108" font-size="11" fill="#161616">• Computes self-attention on Attention Heads 4..7</text>
+    <text x="16" y="124" font-size="10" fill="#525252">• GQA Group: Next 4 query heads mapped to KV heads 4..7</text>
+  </g>
+</svg>

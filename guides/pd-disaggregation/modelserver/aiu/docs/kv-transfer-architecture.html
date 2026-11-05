@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>KV Cache Transfer Architecture for Prefill-Decode Disaggregation on IBM Spyre and Hybrid Platforms</title>
+  <title>kv-transfer-architecture</title>
   <style>
     html {
       color: #1a1a1a;
@@ -395,7 +395,7 @@
     });
   </script>
   <script defer=""
-  src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  src="/usr/share/javascript/katex/katex.min.js"></script>
   <script>document.addEventListener("DOMContentLoaded", function () {
  var mathElements = document.getElementsByClassName("math");
  var macros = [];
@@ -411,13 +411,9 @@
 }}});
   </script>
   <link rel="stylesheet"
-  href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  href="/usr/share/javascript/katex/katex.min.css" />
 </head>
 <body>
-<header id="title-block-header">
-<h1 class="title">KV Cache Transfer Architecture for Prefill-Decode
-Disaggregation on IBM Spyre and Hybrid Platforms</h1>
-</header>
 <h1
 id="kv-cache-transfer-architecture-for-prefill-decode-disaggregation-on-ibm-spyre-and-hybrid-platforms">KV
 Cache Transfer Architecture for Prefill-Decode Disaggregation on IBM
@@ -590,24 +586,9 @@ Spyre AIU worker nodes (<code>p1-worker-63</code> or
 <code>p1-worker-69</code>). Inter-pod KV transfer leverages Linux
 Cross-Memory-Attach (CMA) via <code>process_vm_readv</code> for
 zero-network same-node transfers, or UCX TCP:</p>
-<pre><code>OpenShift Node: p1-worker-63 / p1-worker-69 (Namespace: llm-d-on-aiu)
-+----------------------------------------------------------------------------------------+
-|                                                                                        |
-|  Decode Pod (2/2 Ready)                                Prefill Pod (1/1 Ready)         |
-|  IP: 10.130.2.28 (Node 63) / 10.131.2.49 (Node 69)     IP: 10.130.2.29 / 10.131.2.50   |
-|  +---------------------------------+                   +-----------------------------+ |
-|  | Container: routing-proxy        |                   | Container: modelserver      | |
-|  | Port: 8000 (external ingress)   |                   | Port: 8000 (Phase 1)        | |
-|  | KVConnector: SpyreNixlConnector |                   | TP=1, 1x IBM Spyre AIU      | |
-|  | Forwards Phase 2 to :8001       |                   | NIXL side-channel: 5600     | |
-|  +---------------------------------+                   +--------------+--------------+ |
-|  | Container: modelserver          |                                  |                |
-|  | Port: 8001 (internal decode)    |&lt;---------------------------------+                |
-|  | TP=1 (1 AIU) or TP=2 (2 AIUs)   |   UCX Transport (CMA process_vm_readv / TCP)      |
-|  | NIXL side-channel: 5600         |   D2H -&gt; Host DRAM -&gt; H2D                         |
-|  +---------------------------------+                                                   |
-|                                                                                        |
-+----------------------------------------------------------------------------------------+</code></pre>
+<p align="center">
+<img src="images/diag-homogeneous-pod-layout.svg" alt="Homogeneous Prefill-Decode Disaggregation Pod Layout" width="100%" />
+</p>
 <h4
 id="b-heterogeneous-hybrid-prefill-decode-disaggregation-spyre-aiu-to-nvidia-a100-gpu">(b)
 Heterogeneous Hybrid Prefill-Decode Disaggregation (Spyre AIU <span
@@ -619,31 +600,9 @@ or 4 IBM Spyre AIU worker pods on node <code>p1-worker-63</code> or
 A100-PCIE-80GB GPU on node <code>p1-gpu-worker-1</code>. NIXL transfers
 KV blocks across physical nodes via UCX TCP over OpenShift SDN pod
 networking:</p>
-<pre><code>OpenShift Cluster: llm-d.spyre (Namespace: llm-d-on-gpu)
-+----------------------------------------------+       +----------------------------------------------+
-| Prefill Tier: Node p1-worker-63              |       | Decode Tier: Node p1-gpu-worker-1            |
-| (1x, 2x, or 4x IBM Spyre AIU Replicas)       |       | (Dedicated NVIDIA A100-PCIE-80GB GPU)        |
-|                                              |       |                                              |
-| +------------------------------------------+ |       | +------------------------------------------+ |
-| | Pod: pd-disagg-hybrid-spyre-prefill-P1   | |       | | Pod: pd-disagg-hybrid-nvidia-gpu-decode  | |
-| | IP: 10.130.2.55 | AIU Card 2f:00.0 (75W) | |       | | IP: 10.128.4.127 | NVIDIA A100 GPU 2     | |
-| | TP=1, vLLM 0.28.0 (Spyre Plugin)         | |       | |                                          | |
-| | NIXL side-channel: 5600                  | |       | | +--------------------------------------+ | |
-| +--------------------+---------------------+ |       | | | Container: routing-proxy (Port 8000) | | |
-|                      |                       |       | | | Ingress, EPP load dispatch           | | |
-| +--------------------+---------------------+ |       | | +--------------------------------------+ | |
-| | Pod: pd-disagg-hybrid-spyre-prefill-P2   | |       | | | Container: modelserver (Port 8001)   | | |
-| | IP: 10.130.2.72 | AIU Card 30:00.0 (75W) | |       | | | TP=1, vLLM 0.28.0 (CUDA Plugin)      | | |
-| | TP=1, vLLM 0.28.0 (Spyre Plugin)         | |       | | | --block-size=64                      | | |
-| | NIXL side-channel: 5600                  | |       | | | enforce_handshake_compat: false      | | |
-| +--------------------+---------------------+ |       | | | NIXL side-channel: 5600              | | |
-|                      |                       |       | | +------------------^-------------------+ | |
-|                      |                       |       | +--------------------+---------------------+ |
-+----------------------+-----------------------+       +----------------------+-----------------------+
-                       |                                                      |
-                       +--------------- Cross-Node UCX TCP Interconnect ------+
-                                        (OpenShift 100 GbE RoCE / TCP Network)
-                                        D2H (Spyre) -&gt; CPU Staging -&gt; UCX TCP -&gt; H2D (GPU VRAM)</code></pre>
+<p align="center">
+<img src="images/diag-heterogeneous-pod-layout.svg" alt="Heterogeneous Hybrid Prefill-Decode Disaggregation Pod Layout" width="100%" />
+</p>
 <hr />
 <h2 id="request-flow-disaggregated-protocol">3. Request Flow &amp;
 Disaggregated Protocol</h2>
@@ -652,15 +611,9 @@ Ingress &amp; Gateway Architecture</h3>
 <p>External clients connect through the Istio Ingress Gateway
 (<code>172.30.116.228:80</code>), which evaluates HTTPRoutes and
 delegates request scheduling to the Endpoint Picker (EPP):</p>
-<pre><code>External Client
-      |
-      v
-Istio Ingress Gateway (Port 80)
-      |
-      +---&gt; HTTPRoute: /tp1/v1/completions ----&gt; EPP --&gt; Spyre TP=1 Disaggregated Pool (Node 63)
-      +---&gt; HTTPRoute: /v1/completions --------&gt; EPP --&gt; Spyre TP=2 Disaggregated Pool (Node 69)
-      +---&gt; HTTPRoute: /hybrid/v1/completions --&gt; EPP --&gt; Hybrid (1P/2P/4P Spyre + 1D GPU) Pool
-      +---&gt; HTTPRoute: /gpu/v1/completions ----&gt; EPP --&gt; Homogeneous A100 GPU Pool (Node GPU-1)</code></pre>
+<p align="center">
+<img src="images/diag-gateway-routing.svg" alt="Multi-Route Ingress and Gateway Architecture" width="95%" />
+</p>
 <p>When a request arrives at the target decode pod’s
 <code>routing-proxy</code> (port 8000): 1. <strong>Header
 Inspection:</strong> The routing-proxy inspects the
@@ -672,55 +625,24 @@ prompt to the designated prefill pod at port 8000 with
 <code>kv_transfer_params</code> from Phase 1, the proxy issues an
 internal HTTP request to the local decode engine at port 8001 with
 <code>do_remote_prefill=true</code> and the full token budget.</p>
-<pre><code>                  +----------------------------------------------+
-                  |              External Client                 |
-                  +----------------------+-----------------------+
-                                         | POST /hybrid/v1/completions
-                                         v
-                  +----------------------------------------------+
-                  |            Istio Ingress Gateway             |
-                  +----------------------+-----------------------+
-                                         |
-                                         v
-                  +----------------------------------------------+
-                  |          Endpoint Picker (EPP)               |
-                  |   Selects Prefill Worker (P1..P4) via LLR    |
-                  +----------------------+-----------------------+
-                                         | Injects x-prefiller-host-port
-                                         v
-                  +----------------------------------------------+
-                  |      Decode Pod (routing-proxy :8000)        |
-                  +--------------+-------------------------------+
-                                 |
-        +------------------------+------------------------+
-        | Phase 1: POST to Prefill Pod (:8000)            | Phase 2: POST to Decode Modelserver (:8001)
-        v                                                 v
-+------------------------------+                  +---------------------------------------------+
-|  Spyre Prefill Worker (P_i)  |                  |       Decode Modelserver (Port 8001)        |
-|                              |                  |                                             |
-| 1. Forward pass on AIU       |                  | 4. NIXL Handshake (Port 5600)               |
-| 2. D2H: AIU DRAM -&gt; Host     |                  | 5. NIXL READ: Fetch KV Blocks via UCX       |
-| 3. Return KVTransferParams   |-----------------&gt;| 6. H2D: Host Staging -&gt; Device Memory      |
-|    (engine_id, blocks, host) |  HTTP 200 JSON   | 7. Autoregressive Token Generation (Decode) |
-+------------------------------+                  +----------------------+----------------------+
-                                                                         |
-                                                                         v
-                                                          Streaming Response to Client</code></pre>
+<p align="center">
+<img src="images/diag-request-flow.svg" alt="Disaggregated Request Flow Protocol" width="100%" />
+</p>
 <hr />
 <h3 id="phase-1-prefill-detail-d2h-staging">3.2 Phase 1 — Prefill Detail
 &amp; D2H Staging</h3>
 <p>The routing-proxy issues Phase 1 to the prefill instance:</p>
-<div class="sourceCode" id="cb5"><pre
-class="sourceCode json"><code class="sourceCode json"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="er">POST</span> <span class="er">http://10.130.2.55:8000/v1/completions</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;model&quot;</span><span class="fu">:</span> <span class="st">&quot;granite-8b&quot;</span><span class="fu">,</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;prompt&quot;</span><span class="fu">:</span> <span class="st">&quot;&lt;user_prompt&gt;&quot;</span><span class="fu">,</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;max_tokens&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;kv_transfer_params&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;do_remote_decode&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_engine_id&quot;</span><span class="fu">:</span> <span class="st">&quot;c4b9d0e2-8812-4f3a-9e11-37d4029fa1b0&quot;</span></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="er">POST</span> <span class="er">http://10.130.2.55:8000/v1/completions</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;model&quot;</span><span class="fu">:</span> <span class="st">&quot;granite-8b&quot;</span><span class="fu">,</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;prompt&quot;</span><span class="fu">:</span> <span class="st">&quot;&lt;user_prompt&gt;&quot;</span><span class="fu">,</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;max_tokens&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;kv_transfer_params&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;do_remote_decode&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_engine_id&quot;</span><span class="fu">:</span> <span class="st">&quot;c4b9d0e2-8812-4f3a-9e11-37d4029fa1b0&quot;</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
 <p>Execution steps on the prefill engine: 1. <strong>Attention
 Compute:</strong> Executes the prompt forward pass using SENDNN static
 graph execution kernels on IBM Spyre AIU. 2. <strong>D2H Copy
@@ -732,41 +654,41 @@ class="math display">\text{SpyrePaged.k\_pages}[\text{blk}]
 \text{staging\_k}[\text{layer}][\text{blk}]</span> 3. <strong>Response
 Packaging:</strong> Returns HTTP 200 containing
 <code>kv_transfer_params</code>:</p>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode json"><code class="sourceCode json"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;kv_transfer_params&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;do_remote_prefill&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_block_ids&quot;</span><span class="fu">:</span> <span class="ot">[[</span><span class="dv">1</span><span class="ot">]]</span><span class="fu">,</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_engine_id&quot;</span><span class="fu">:</span> <span class="st">&quot;1a17e9e2-077e-44d2-a3a6-b2fcca665e6c&quot;</span><span class="fu">,</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_request_id&quot;</span><span class="fu">:</span> <span class="st">&quot;cmpl-a25f9e90701c5a3e-0-84ff2e97&quot;</span><span class="fu">,</span></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_host&quot;</span><span class="fu">:</span> <span class="st">&quot;10.130.2.55&quot;</span><span class="fu">,</span></span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_port&quot;</span><span class="fu">:</span> <span class="dv">5600</span><span class="fu">,</span></span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;tp_size&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_num_tokens&quot;</span><span class="fu">:</span> <span class="dv">16</span></span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;kv_transfer_params&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;do_remote_prefill&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_block_ids&quot;</span><span class="fu">:</span> <span class="ot">[[</span><span class="dv">1</span><span class="ot">]]</span><span class="fu">,</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_engine_id&quot;</span><span class="fu">:</span> <span class="st">&quot;1a17e9e2-077e-44d2-a3a6-b2fcca665e6c&quot;</span><span class="fu">,</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_request_id&quot;</span><span class="fu">:</span> <span class="st">&quot;cmpl-a25f9e90701c5a3e-0-84ff2e97&quot;</span><span class="fu">,</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_host&quot;</span><span class="fu">:</span> <span class="st">&quot;10.130.2.55&quot;</span><span class="fu">,</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_port&quot;</span><span class="fu">:</span> <span class="dv">5600</span><span class="fu">,</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;tp_size&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_num_tokens&quot;</span><span class="fu">:</span> <span class="dv">16</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
 <hr />
 <h3 id="phase-2-decode-detail-nixl-transfer-h2d-ingestion">3.3 Phase 2 —
 Decode Detail, NIXL Transfer &amp; H2D Ingestion</h3>
 <p>The routing-proxy injects <code>kv_transfer_params</code> into the
 Phase 2 request to the local decode engine:</p>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode json"><code class="sourceCode json"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="er">POST</span> <span class="er">http://localhost:8001/v1/completions</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;model&quot;</span><span class="fu">:</span> <span class="st">&quot;granite-8b&quot;</span><span class="fu">,</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;prompt&quot;</span><span class="fu">:</span> <span class="st">&quot;&lt;user_prompt&gt;&quot;</span><span class="fu">,</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;max_tokens&quot;</span><span class="fu">:</span> <span class="dv">200</span><span class="fu">,</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;kv_transfer_params&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;do_remote_prefill&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_block_ids&quot;</span><span class="fu">:</span> <span class="ot">[[</span><span class="dv">1</span><span class="ot">]]</span><span class="fu">,</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_engine_id&quot;</span><span class="fu">:</span> <span class="st">&quot;1a17e9e2-077e-44d2-a3a6-b2fcca665e6c&quot;</span><span class="fu">,</span></span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_request_id&quot;</span><span class="fu">:</span> <span class="st">&quot;cmpl-a25f9e90701c5a3e-0-84ff2e97&quot;</span><span class="fu">,</span></span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_host&quot;</span><span class="fu">:</span> <span class="st">&quot;10.130.2.55&quot;</span><span class="fu">,</span></span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_port&quot;</span><span class="fu">:</span> <span class="dv">5600</span><span class="fu">,</span></span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;tp_size&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_num_tokens&quot;</span><span class="fu">:</span> <span class="dv">16</span></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="er">POST</span> <span class="er">http://localhost:8001/v1/completions</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;model&quot;</span><span class="fu">:</span> <span class="st">&quot;granite-8b&quot;</span><span class="fu">,</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;prompt&quot;</span><span class="fu">:</span> <span class="st">&quot;&lt;user_prompt&gt;&quot;</span><span class="fu">,</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;max_tokens&quot;</span><span class="fu">:</span> <span class="dv">200</span><span class="fu">,</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;kv_transfer_params&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;do_remote_prefill&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_block_ids&quot;</span><span class="fu">:</span> <span class="ot">[[</span><span class="dv">1</span><span class="ot">]]</span><span class="fu">,</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_engine_id&quot;</span><span class="fu">:</span> <span class="st">&quot;1a17e9e2-077e-44d2-a3a6-b2fcca665e6c&quot;</span><span class="fu">,</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_request_id&quot;</span><span class="fu">:</span> <span class="st">&quot;cmpl-a25f9e90701c5a3e-0-84ff2e97&quot;</span><span class="fu">,</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_host&quot;</span><span class="fu">:</span> <span class="st">&quot;10.130.2.55&quot;</span><span class="fu">,</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_port&quot;</span><span class="fu">:</span> <span class="dv">5600</span><span class="fu">,</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;tp_size&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;remote_num_tokens&quot;</span><span class="fu">:</span> <span class="dv">16</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
 <p>Execution steps on the decode engine: 1. <strong>NIXL
 Handshake:</strong> Connects to <code>remote_host:5600</code> via TCP
 side-channel, exchanges agent metadata, and validates layout
@@ -839,22 +761,9 @@ and V). - <strong>Region Shape:</strong>
 to NIXL descriptor indexing.</p>
 <hr />
 <h3 id="nixl-handshake-protocol">4.3 NIXL Handshake &amp; Protocol</h3>
-<pre><code>Decode Worker (PID d_worker)             Prefill Worker (PID p_worker)
-      |                                                |
-      |-- TCP Connect to Port 5600 -------------------&gt;|
-      |&lt;- NixlHandshakePayload (Metadata + Descs) -----|
-      |                                                |
-      |-- Verify Dimensions &amp; Staging Strides --------&gt;|
-      |-- nixl_wrapper.add_remote_agent() ------------&gt;|
-      |   +- Build Remote Descriptors (prep_xfer_dlist)|
-      |   +- Establish UCX Channel (CMA / TCP) -------&gt;|
-      |                                                |
-Per Request:                                           |
-      |-- nixl_wrapper.transfer(&quot;READ&quot;, block_ids) ---&gt;| (Async DMA Read)
-      |&lt;-- UCX Transfer Completed (DONE) --------------|
-      |                                                |
-      |-- sync_recved_kv_to_device() (H2D Copy) -------|
-      |-- Autoregressive Decode Step 1 ----------------|</code></pre>
+<p align="center">
+<img src="images/diag-nixl-handshake.svg" alt="NIXL Handshake and Protocol" width="95%" />
+</p>
 <hr />
 <h3 id="tp-head-splitting-tp1-prefill-to-tp2-decode">4.4 TP Head
 Splitting (TP=1 Prefill to TP=2 Decode)</h3>
@@ -862,14 +771,9 @@ Splitting (TP=1 Prefill to TP=2 Decode)</h3>
 KV heads staged together) and decode runs at <span
 class="math inline">\text{TP}=2</span> (4 KV heads per card), NIXL
 computes rank-specific byte offsets into the prefill staging buffer:</p>
-<pre><code>Prefill TP=1 Staging Buffer (8 KV Heads per Layer):
-+--------------------------------------+--------------------------------------+
-|  Heads 0 .. 3 (65,536 Bytes / Block) |  Heads 4 .. 7 (65,536 Bytes / Block) |
-+------------------+-------------------+------------------+-------------------+
-                   |                                      |
-                   v                                      v
-        Decode TP Rank 0 (Heads 0..3)          Decode TP Rank 1 (Heads 4..7)
-        Offset: 0 Bytes                        Offset: 65,536 Bytes</code></pre>
+<p align="center">
+<img src="images/diag-tp-head-splitting.svg" alt="TP Head Splitting and Memory Offset Layout" width="95%" />
+</p>
 <hr />
 <h2 id="key-code-changes-modified-components">5. Key Code Changes &amp;
 Modified Components</h2>
@@ -892,16 +796,16 @@ non-contiguous <code>SpyrePagedKVCache</code> block copies
 <code>spyre_inference/__init__.py</code></h3>
 <p>Integrates connector auto-registration into the
 <code>spyre_inference</code> package initialization:</p>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> register():</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Existing SENDNN static graph and device registration...</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>        <span class="im">from</span> spyre_inference.distributed.kv_transfer.kv_connector.v1.nixl.spyre_connector <span class="im">import</span> (</span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>            register_spyre_nixl_connectors,</span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>        register_spyre_nixl_connectors()</span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>        logger.warning(<span class="ss">f&quot;Could not register Spyre NIXL connectors: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> register():</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Existing SENDNN static graph and device registration...</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>        <span class="im">from</span> spyre_inference.distributed.kv_transfer.kv_connector.v1.nixl.spyre_connector <span class="im">import</span> (</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>            register_spyre_nixl_connectors,</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>        register_spyre_nixl_connectors()</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        logger.warning(<span class="ss">f&quot;Could not register Spyre NIXL connectors: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">&quot;</span>)</span></code></pre></div>
 <hr />
 <h3 id="utils.py-patch">5.3 <code>utils.py</code> Patch</h3>
 <p>Located at:
