@@ -159,6 +159,8 @@ Comprehensive performance benchmarks, architectural specifications, and hybrid s
    - Step-by-step instructions for deploying IBM Spyre AIU Prefill + NVIDIA GPU Decode with llm-d Gateway multi-route routing and EPP.
 4. **[Hybrid PD Disaggregation Cost-Benefit & TCO Analysis](guides/pd-disaggregation/modelserver/aiu/docs/hybrid-pd-cost-benefit-analysis.md)**:
    - Financial modeling, hardware utilization, energy efficiency, and total cost of ownership (TCO) comparison.
+5. **[Agentic Workloads with Long Contexts on Disaggregated PD Architecture](guides/pd-disaggregation/modelserver/aiu/docs/agentic-workloads-with-disaggregated-pd.md)**:
+   - Analysis of multi-turn ReAct loops, tool execution pauses, strictly unidirectional $P \to D$ transfers, EPP prefix-aware load balancing, performance trade-offs, and TCO economics.
 
 ---
 
@@ -178,7 +180,8 @@ Comprehensive performance benchmarks, architectural specifications, and hybrid s
 │               │   ├── disagg-pd-performance-comparison-analysis.md
 │               │   ├── kv-transfer-architecture.md
 │               │   ├── hybrid-pd-disagg-setup.md
-│               │   └── hybrid-pd-cost-benefit-analysis.md
+│               │   ├── hybrid-pd-cost-benefit-analysis.md
+│               │   └── agentic-workloads-with-disaggregated-pd.md
 │               └── vllm/
 │                   ├── base/           # TP=2 Disaggregated PD manifests
 │                   ├── tp1/            # TP=1 Disaggregated PD manifests

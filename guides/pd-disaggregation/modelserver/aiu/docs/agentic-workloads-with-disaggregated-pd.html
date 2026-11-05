@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>agentic-workloads-with-disaggregated-pd</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+    html {
+      scroll-behavior: smooth;
+      color: #1f2328;
+      background-color: #ffffff;
+      font-size: 15px;
+    }
+    body {
+      font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 40px 36px 80px 36px;
+      word-wrap: break-word;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      color: #1f2328;
+      font-weight: 600;
+      margin-top: 1.8em;
+      margin-bottom: 0.6em;
+      line-height: 1.3;
+    }
+    h1 { font-size: 2.2em; border-bottom: 2px solid #d0d7de; padding-bottom: 0.3em; margin-top: 0; }
+    h2 { font-size: 1.6em; border-bottom: 1px solid #d0d7de; padding-bottom: 0.3em; }
+    h3 { font-size: 1.25em; }
+    h4 { font-size: 1.05em; }
+
+    a {
+      color: #0969da;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* Responsive scrollable table wrapper */
+    .table-wrapper {
+      overflow-x: auto;
+      max-width: 100%;
+      margin: 1.5em 0;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      background-color: #ffffff;
+      scrollbar-width: thin;
+      scrollbar-color: #8c959f #f6f8fa;
+    }
+    .table-wrapper::-webkit-scrollbar {
+      height: 9px;
+    }
+    .table-wrapper::-webkit-scrollbar-track {
+      background: #f6f8fa;
+      border-radius: 0 0 6px 6px;
+    }
+    .table-wrapper::-webkit-scrollbar-thumb {
+      background-color: #8c959f;
+      border-radius: 4px;
+      border: 2px solid #f6f8fa;
+    }
+    .table-wrapper::-webkit-scrollbar-thumb:hover {
+      background-color: #6e7781;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 600px;
+      margin: 0;
+      font-size: 0.92em;
+      display: table;
+    }
+    th, td {
+      border: 1px solid #d0d7de;
+      padding: 8px 12px;
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      overflow-wrap: break-word;
+      word-break: normal;
+    }
+    th {
+      background-color: #f6f8fa;
+      font-weight: 600;
+    }
+    tr:nth-child(even) {
+      background-color: #fbfcfd;
+    }
+    tr:hover {
+      background-color: #f3f4f6;
+    }
+
+    code {
+      font-family: "IBM Plex Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.88em;
+      background-color: rgba(175, 184, 193, 0.2);
+      padding: 0.2em 0.4em;
+      border-radius: 4px;
+    }
+    pre {
+      background-color: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      padding: 16px;
+      overflow-x: auto;
+      font-size: 0.9em;
+      line-height: 1.45;
+      scrollbar-width: thin;
+      scrollbar-color: #8c959f #f6f8fa;
+    }
+    pre::-webkit-scrollbar {
+      height: 8px;
+    }
+    pre::-webkit-scrollbar-track {
+      background: #f6f8fa;
+      border-radius: 4px;
+    }
+    pre::-webkit-scrollbar-thumb {
+      background-color: #8c959f;
+      border-radius: 4px;
+    }
+    pre code {
+      background-color: transparent;
+      padding: 0;
+      border-radius: 0;
+    }
+
+    blockquote {
+      margin: 1em 0;
+      padding: 0 1em;
+      color: #59636e;
+      border-left: 0.25em solid #d0d7de;
+    }
+
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #d0d7de;
+      border: 0;
+    }
+
+    ul, ol {
+      padding-left: 2em;
+      margin-bottom: 1em;
+    }
+    li + li {
+      margin-top: 0.25em;
+    }
+
+    .katex {
+      font-size: 1.05em;
+    }
+  </style>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      // Automatically wrap all markdown tables in responsive, scrollable container
+      document.querySelectorAll("table").forEach(function (table) {
+        if (!table.parentElement.classList.contains("table-wrapper")) {
+          var wrapper = document.createElement("div");
+          wrapper.className = "table-wrapper";
+          table.parentNode.insertBefore(wrapper, table);
+          wrapper.appendChild(table);
+        }
+      });
+    });
+  </script>
+  <script defer=""
+  src="/usr/share/javascript/katex/katex.min.js"></script>
+  <script>document.addEventListener("DOMContentLoaded", function () {
+ var mathElements = document.getElementsByClassName("math");
+ var macros = [];
+ for (var i = 0; i < mathElements.length; i++) {
+  var texText = mathElements[i].firstChild;
+  if (mathElements[i].tagName == "SPAN") {
+   katex.render(texText.data, mathElements[i], {
+    displayMode: mathElements[i].classList.contains('display'),
+    throwOnError: false,
+    macros: macros,
+    fleqn: false
+   });
+}}});
+  </script>
+  <link rel="stylesheet"
+  href="/usr/share/javascript/katex/katex.min.css" />
+</head>
+<body>
+<h1
+id="agentic-workloads-with-long-contexts-on-disaggregated-prefill-decode-architecture">Agentic
+Workloads with Long Contexts on Disaggregated Prefill-Decode
+Architecture</h1>
+<h2
+id="architectural-analysis-heterogeneous-hybrid-configuration-spyre-aiu-nvidia-a100-performance-trade-offs-and-tco-economics">Architectural
+Analysis, Heterogeneous Hybrid Configuration (Spyre AIU + NVIDIA A100),
+Performance Trade-offs, and TCO Economics</h2>
+<p><strong>Date:</strong> October 30, 2026<br />
+<strong>Status:</strong> Architectural Specification &amp; Design
+Analysis<br />
+<strong>Environment:</strong> Red Hat OpenShift Container Platform
+4.20.36 (<code>llm-d.spyre</code>), Namespaces <code>llm-d-on-aiu</code>
+&amp; <code>llm-d-on-gpu</code><br />
+<strong>Model:</strong> <code>ibm-granite/granite-4.2-8b</code> (served
+as <code>granite-8b</code>, bfloat16, 40 layers, GQA 8 KV heads)<br />
+<strong>Hardware Stack:</strong> IBM Spyre PCIe AIU (<span
+class="math inline">75\text{W}</span> TDP) Prefill Tier + NVIDIA
+A100-PCIE-80GB (<span class="math inline">300\text{W}</span> TDP) Decode
+Tier</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol type="1">
+<li><a href="#1-executive-summary">Executive Summary</a></li>
+<li><a href="#2-agentic-workload-dynamics--context-lifecycles">Agentic
+Workload Dynamics &amp; Context Lifecycles</a>
+<ul>
+<li>2.1 <a href="#21-the-agentic-execution-loop-react--tool-use">The
+Agentic Execution Loop (ReAct / Tool-Use)</a></li>
+<li>2.2 <a
+href="#22-directionality-of-kv-cache-transfers-d-to-p-vs-p-to-d">Directionality
+of KV Cache Transfers (<span class="math inline">D \to P</span>
+vs. <span class="math inline">P \to D</span>)</a></li>
+<li>2.3 <a
+href="#23-three-architectural-context-management-mechanisms">Three
+Architectural Context Management Mechanisms</a></li>
+</ul></li>
+<li><a
+href="#3-configuring-heterogeneous-hybrid-platform-for-agentic-workloads">Configuring
+Heterogeneous Hybrid Platform for Agentic Workloads</a>
+<ul>
+<li>3.1 <a
+href="#31-llm-d-router--epp-prefix-aware-routing-configuration">llm-d
+Router &amp; EPP Prefix-Aware Routing Configuration</a></li>
+<li>3.2 <a href="#32-istio-httproute--session-affinity-setup">Istio
+HTTPRoute &amp; Session-Affinity Setup</a></li>
+<li>3.3 <a
+href="#33-spyre-prefill-tier-configuration-vllm--apc--nixl">Spyre
+Prefill Tier Configuration (vLLM + APC + NIXL)</a></li>
+<li>3.4 <a href="#34-nvidia-gpu-decode-tier-configuration">NVIDIA GPU
+Decode Tier Configuration</a></li>
+<li>3.5 <a
+href="#35-memory-staging--interconnect-sizing-for-long-contexts">Memory
+Staging &amp; Interconnect Sizing for Long Contexts</a></li>
+</ul></li>
+<li><a href="#4-expected-performance-trade-offs">Expected Performance
+Trade-offs</a>
+<ul>
+<li>4.1 <a
+href="#41-ttft-and-inter-token-latency-itl-across-multi-turn-loops">TTFT
+and Inter-Token Latency (ITL) Across Multi-Turn Loops</a></li>
+<li>4.2 <a
+href="#42-interconnect-bandwidth--transfer-latency-vs-sequence-length">Interconnect
+Bandwidth &amp; Transfer Latency vs. Sequence Length</a></li>
+<li>4.3 <a href="#43-prefix-caching-hit-rate-impact">Prefix Caching Hit
+Rate Impact</a></li>
+<li>4.4 <a
+href="#44-prefill-to-decode-sizing-ratios-for-agentic-serving-xp1d">Prefill-to-Decode
+Sizing Ratios for Agentic Serving (<span
+class="math inline">x\text{P}:1\text{D}</span>)</a></li>
+</ul></li>
+<li><a
+href="#5-cost-benefit--tco-economics-of-heterogeneous-hybrid-agentic-serving">Cost-Benefit
+&amp; TCO Economics of Heterogeneous Hybrid Agentic Serving</a>
+<ul>
+<li>5.1 <a href="#51-the-agent-tool-wait-time-gpu-idling-penalty">The
+“Agent Tool Wait Time” GPU Idling Penalty</a></li>
+<li>5.2 <a href="#52-capex-opex-and-power-efficiency-comparison">CapEx,
+OpEx, and Power Efficiency Comparison</a></li>
+<li>5.3 <a
+href="#53-cost-per-1m-agentic-tokens--workload-throughput-roi">Cost per
+1M Agentic Tokens &amp; Workload Throughput ROI</a></li>
+</ul></li>
+<li><a href="#6-architectural-recommendations--next-steps">Architectural
+Recommendations &amp; Next Steps</a></li>
+</ol>
+<hr />
+<h2 id="executive-summary">1. Executive Summary</h2>
+<p>Agentic AI systems (e.g., ReAct reasoning agents, autonomous coding
+assistants, and multi-turn tool-calling workflows) introduce radically
+different compute patterns compared to traditional stateless chat
+completions. Agentic interactions feature <strong>cumulative multi-turn
+prompts</strong>, <strong>large bursty context expansions</strong> (from
+retrieved documents, SQL schemas, API outputs, and environment states),
+and <strong>variable external latency pauses</strong> (during tool and
+sandbox execution).</p>
+<p>When deployed on traditional monolithic GPU clusters, agentic
+workloads cause severe inefficiencies: 1. <strong>GPU Idling During Tool
+Execution:</strong> Expensive GPUs sit idle waiting for external tool
+execution (APIs, code sandboxes, database queries), wasting high-power
+compute and memory capacity. 2. <strong>Decode Stalling from Bursty
+Prefills:</strong> Whenever a tool returns with large payloads (e.g.,
+<span class="math inline">4\text{k}\text{--}16\text{k}</span> tokens),
+running prefill on the same GPU blocks active token generation loops,
+degrading Inter-Token Latency (ITL) by up to <span
+class="math inline">10\times</span>. 3. <strong>Redundant Prompt
+Recomputation:</strong> Stateless routing recomputes previous
+conversation history and static system prompts on every turn.</p>
+<p><strong>Prefill-Decode (PD) Disaggregation</strong> with a
+<strong>Heterogeneous Hybrid Topology</strong> (IBM Spyre AIU for
+Prefill + NVIDIA A100 GPU for Decode) directly addresses these
+limitations: - <strong>Strictly Unidirectional <span
+class="math inline">P \to D</span> Transfer:</strong> Context is
+prefilled on energy-efficient IBM Spyre PCIe AIUs (<span
+class="math inline">75\text{W}</span> TDP) and transferred to the NVIDIA
+A100 GPU decode engine via NIXL DMA. No reverse <span
+class="math inline">D \to P</span> transfers are required. -
+<strong>Prefix Caching &amp; Delta Transfers:</strong> With Automatic
+Prefix Caching (APC) and <code>llm-d</code> EPP prefix-aware load
+balancing, only newly appended tool results and delta tokens are
+prefilled and transferred over the interconnect. - <strong><span
+class="math inline">3.2\times</span> TCO Reduction:</strong> Offloading
+bursty prefill and tool wait states to low-cost Spyre AIUs frees NVIDIA
+A100 GPUs to execute dense, uninterrupted autoregressive decode at
+native GEMV speeds (<span class="math inline">\approx 80\text{
+tok/s}</span>).</p>
+<hr />
+<h2 id="agentic-workload-dynamics-context-lifecycles">2. Agentic
+Workload Dynamics &amp; Context Lifecycles</h2>
+<h3 id="the-agentic-execution-loop-react-tool-use">2.1 The Agentic
+Execution Loop (ReAct / Tool-Use)</h3>
+<p>An agentic task progresses through sequential
+thought-action-observation cycles. At each iteration, the prompt expands
+cumulatively:</p>
+<p><span class="math display">\begin{aligned}
+\text{Turn 1 (Planning):} &amp; \quad P_1 = [S, U_1]
+\xrightarrow{\text{Decode}} [T_1, A_1] \\
+\text{External Execution:} &amp; \quad \text{Tool executes externally
+(latency: } 500\text{ ms}\text{ to } 30\text{ s}) \to R_1 \\
+\text{Turn 2 (Reflection):} &amp; \quad P_2 = [S, U_1, T_1, A_1, R_1,
+U_2] \xrightarrow{\text{Decode}} [T_2, A_2] \\
+\text{External Execution:} &amp; \quad \text{Tool executes externally}
+\to R_2 \\
+\text{Turn 3 (Final Answer):} &amp; \quad P_3 = [S, U_1, T_1, A_1, R_1,
+U_2, T_2, A_2, R_2] \xrightarrow{\text{Decode}} C_{\text{final}}
+\end{aligned}</span></p>
+<p>Where: - <span class="math inline">S</span>: System instructions,
+tool schemas, and agent prompt templates (<span
+class="math inline">1\text{k}\text{--}4\text{k}</span> tokens). - <span
+class="math inline">U_i</span>: User requests and task goals. - <span
+class="math inline">T_i, A_i</span>: Agent reasoning traces and tool
+call invocations generated by the model (<span
+class="math inline">50\text{--}300</span> tokens). - <span
+class="math inline">R_i</span>: External tool observation outputs, web
+scrape dumps, code compiler outputs, or database query records (<span
+class="math inline">1\text{k}\text{--}16\text{k}</span> tokens).</p>
+<hr />
+<h3 id="directionality-of-kv-cache-transfers-d-to-p-vs.-p-to-d">2.2
+Directionality of KV Cache Transfers (<span class="math inline">D \to
+P</span> vs. <span class="math inline">P \to D</span>)</h3>
+<p>A fundamental question in disaggregated serving for agentic systems
+is: &gt; <em>Does an agentic workflow require transferring decoded
+tokens from the Decode engine back to the Prefill engine (<span
+class="math inline">D \to P</span>), or is all context maintained on the
+decode side?</em></p>
+<h4 id="the-architectural-reality">The Architectural Reality:</h4>
+<p><strong>KV cache transfer remains strictly unidirectional from
+Prefill to Decode (<span class="math inline">P \to D</span>). No <span
+class="math inline">D \to P</span> transfer is required or utilized in
+<code>llm-d</code> / vLLM NIXL.</strong></p>
+<pre><code>Agentic Multi-Turn Flow in Disaggregated PD:
+
+  [ Prefill Tier: IBM Spyre AIU ]                         [ Decode Tier: NVIDIA A100 GPU ]
+                 |                                                        |
+Turn 1:          |==== Compute KV(S + U_1) ====&gt; [ NIXL DMA P-&gt;D ] ======&gt;|==&gt; Generates [T_1, A_1] (Local KV)
+                 |                                                        |
+   [ External Tool Execution Pause: Search / Sandbox / SQL Query (e.g. 2.5s) — GPU &amp; AIU Idle ]
+                 |                                                        |
+Turn 2:          |==== Prefill Delta KV(R_1 + U_2) =&gt; [ NIXL DMA P-&gt;D ] =&gt;|==&gt; Generates [T_2, A_2]
+                 |     (Reuses cached prefix via APC)                     |    (Appends delta blocks)</code></pre>
+<h4 id="why-d-to-p-transfers-are-unnecessary">Why <span
+class="math inline">D \to P</span> Transfers Are Unnecessary:</h4>
+<ol type="1">
+<li><strong>Parallel vs. Sequential Compute Asymmetry:</strong> Prefill
+processes hundreds or thousands of prompt tokens in <strong>parallel in
+a single forward pass</strong> (GEMM matrix multiplication). On hardware
+accelerators, prefilling <span class="math inline">200</span> decoded
+tokens takes <span class="math inline">&lt; 15\text{ ms}</span>. In
+contrast, establishing a reverse network handshake, extracting
+non-contiguous KV blocks from decode VRAM, serializing descriptors, and
+transferring them across nodes over TCP/RoCE would take <span
+class="math inline">20\text{--}60\text{ ms}</span>. <strong>Recomputing
+or caching on <span class="math inline">P</span> is faster and cheaper
+than network transfer from <span
+class="math inline">D</span>.</strong></li>
+<li><strong>Deterministic Token Sequences:</strong> The output tokens
+<span class="math inline">[T_1, A_1]</span> generated by Decode in Turn
+1 are returned to the agent orchestrator as standard text strings. When
+the orchestrator constructs Turn 2, <span class="math inline">[T_1,
+A_1]</span> are serialized back into the input prompt text alongside
+<span class="math inline">R_1</span>. The prefill engine treats them as
+standard input tokens.</li>
+<li><strong>Decoupled Lifecycle:</strong> Decode nodes do not need to
+keep long-term state synchronization channels open with prefill workers.
+Prefill workers remain completely stateless across turns, scaling
+horizontally and independently.</li>
+</ol>
+<hr />
+<h3 id="three-architectural-context-management-mechanisms">2.3 Three
+Architectural Context Management Mechanisms</h3>
+<p>In disaggregated serving, agentic context across turns is managed
+through three primary architectures:</p>
+<pre><code>+---------------------------------------------------------------------------------------------------+
+| Mechanism A: Unidirectional P-&gt;D Transfer with Automatic Prefix Caching (APC)                     |
+| • P caches KV(S + U_1) in host/device memory via Radix Tree.                                      |
+| • P prefills ONLY the delta [T_1, A_1, R_1].                                                      |
+| • P transfers ONLY delta KV blocks to D via NIXL DMA.                                             |
++---------------------------------------------------------------------------------------------------+
+| Mechanism B: Session-Affinity Routing (Sticky Decode Engine)                                      |
+| • Router pins Agent Session ID to Decode Pod D_1.                                                 |
+| • D_1 retains existing KV blocks from Turn 1 in local VRAM / Host DRAM.                           |
+| • P computes and transmits only the new delta KV blocks for R_1. D_1 appends them locally.        |
++---------------------------------------------------------------------------------------------------+
+| Mechanism C: Distributed Global KV Cache Tier (CXL / Shared RDMA Pool)                            |
+| • Disaggregated tiered memory pool (e.g. Mooncake / CXL 3.0 / Host Memory Pool).                  |
+| • Both P and D register and index global block UUIDs.                                             |
+| • Zero peer-to-peer network transfer; zero recomputation.                                         |
++---------------------------------------------------------------------------------------------------+</code></pre>
+<hr />
+<h2
+id="configuring-heterogeneous-hybrid-platform-for-agentic-workloads">3.
+Configuring Heterogeneous Hybrid Platform for Agentic Workloads</h2>
+<p>To support agentic workloads with long contexts (up to <span
+class="math inline">32\text{k}</span> tokens) on a heterogeneous hybrid
+cluster (IBM Spyre AIU Prefill + NVIDIA A100 GPU Decode), the following
+subsystem configurations are deployed:</p>
+<h3 id="llm-d-router-epp-prefix-aware-routing-configuration">3.1 llm-d
+Router &amp; EPP Prefix-Aware Routing Configuration</h3>
+<p>The <code>Endpoint Picker (EPP)</code> must be configured with the
+<code>prefix-cache-scorer</code> plugin to route multi-turn agent
+requests sharing common system prompts and prefixes to the same prefill
+worker:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># guides/pd-disaggregation/hybrid/epp.yaml</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">apiVersion</span><span class="kw">:</span><span class="at"> apps/v1</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="fu">kind</span><span class="kw">:</span><span class="at"> Deployment</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="fu">metadata</span><span class="kw">:</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">name</span><span class="kw">:</span><span class="at"> pd-disaggregation-epp</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">namespace</span><span class="kw">:</span><span class="at"> llm-d-on-gpu</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="fu">spec</span><span class="kw">:</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">replicas</span><span class="kw">:</span><span class="at"> </span><span class="dv">1</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">template</span><span class="kw">:</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">spec</span><span class="kw">:</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">containers</span><span class="kw">:</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> epp</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">image</span><span class="kw">:</span><span class="at"> ghcr.io/llm-d/llm-d-epp:v0.11.0</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">args</span><span class="kw">:</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> --scorer=prefix-cache-scorer</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> --scorer=least-token-load</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> --prefix-cache-token-threshold=64</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> --vllm-endpoint=http://pd-disagg-hybrid-nvidia-gpu-decode:8000</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">env</span><span class="kw">:</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> PROMETHEUS_METRICS_ENABLED</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;true&quot;</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> LOG_LEVEL</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;info&quot;</span></span></code></pre></div>
+<hr />
+<h3 id="istio-httproute-session-affinity-setup">3.2 Istio HTTPRoute
+&amp; Session-Affinity Setup</h3>
+<p>For agentic sessions requiring sticky decode affinity across turns,
+configure cookie or header-based session persistence in the OpenShift
+Istio <code>HTTPRoute</code>:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># guides/pd-disaggregation/hybrid/routing.yaml</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">apiVersion</span><span class="kw">:</span><span class="at"> gateway.networking.k8s.io/v1</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">kind</span><span class="kw">:</span><span class="at"> HTTPRoute</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="fu">metadata</span><span class="kw">:</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">name</span><span class="kw">:</span><span class="at"> llm-d-agentic-route</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">namespace</span><span class="kw">:</span><span class="at"> llm-d-on-gpu</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="fu">spec</span><span class="kw">:</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">parentRefs</span><span class="kw">:</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> istio-ingressgateway</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">namespace</span><span class="kw">:</span><span class="at"> istio-system</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">sectionName</span><span class="kw">:</span><span class="at"> http</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">rules</span><span class="kw">:</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">matches</span><span class="kw">:</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> </span><span class="fu">path</span><span class="kw">:</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">type</span><span class="kw">:</span><span class="at"> PathPrefix</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">value</span><span class="kw">:</span><span class="at"> /agent/v1/completions</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">sessionPersistence</span><span class="kw">:</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">sessionName</span><span class="kw">:</span><span class="at"> agent-session-id</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">type</span><span class="kw">:</span><span class="at"> Header</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">backendRefs</span><span class="kw">:</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> pd-disagg-hybrid-nvidia-gpu-decode</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">port</span><span class="kw">:</span><span class="at"> </span><span class="dv">8000</span></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">weight</span><span class="kw">:</span><span class="at"> </span><span class="dv">1</span></span></code></pre></div>
+<hr />
+<h3 id="spyre-prefill-tier-configuration-vllm-apc-nixl">3.3 Spyre
+Prefill Tier Configuration (vLLM + APC + NIXL)</h3>
+<p>Prefill pods running on IBM Spyre AIU nodes
+(<code>p1-worker-63</code>) are configured with Automatic Prefix Caching
+(<code>--enable-prefix-caching</code>), packed HND memory staging, and
+extended host staging pools:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># guides/pd-disaggregation/hybrid/spyre-prefill.yaml</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">apiVersion</span><span class="kw">:</span><span class="at"> apps/v1</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="fu">kind</span><span class="kw">:</span><span class="at"> Deployment</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="fu">metadata</span><span class="kw">:</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">name</span><span class="kw">:</span><span class="at"> pd-disagg-hybrid-spyre-prefill</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">namespace</span><span class="kw">:</span><span class="at"> llm-d-on-gpu</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="fu">spec</span><span class="kw">:</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">replicas</span><span class="kw">:</span><span class="at"> </span><span class="dv">4</span><span class="co">  # 4P:1D ratio for agentic workloads</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">template</span><span class="kw">:</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">spec</span><span class="kw">:</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">containers</span><span class="kw">:</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> modelserver</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">image</span><span class="kw">:</span><span class="at"> image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl-latest:v21</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">env</span><span class="kw">:</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> SPYRE_NIXL_PACKED_KV</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;1&quot;</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> SPYRE_NIXL_STAGING_BLOCKS</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;8192&quot;</span><span class="co">  # Expands CPU staging buffer for long agent contexts (up to 32k tokens)</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> UCX_TLS</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;tcp,self&quot;</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> UCX_NET_DEVICES</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;eth0&quot;</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">args</span><span class="kw">:</span></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--model=granite-8b&quot;</span></span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--tensor-parallel-size=1&quot;</span></span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--block-size=64&quot;</span></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--enable-prefix-caching&quot;</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--max-model-len=32768&quot;</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--kv-connector=SpyreNixlConnector&quot;</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--kv-role=kv_producer&quot;</span></span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--port=8000&quot;</span></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">resources</span><span class="kw">:</span></span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">limits</span><span class="kw">:</span></span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a><span class="at">            </span><span class="fu">ibm.com/spyre_pf</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;1&quot;</span></span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a><span class="at">            </span><span class="fu">memory</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;64Gi&quot;</span></span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a><span class="at">            </span><span class="fu">cpu</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;16&quot;</span></span></code></pre></div>
+<hr />
+<h3 id="nvidia-gpu-decode-tier-configuration">3.4 NVIDIA GPU Decode Tier
+Configuration</h3>
+<p>Decode pods running on NVIDIA A100 GPU nodes
+(<code>p1-gpu-worker-1</code>) are configured for long-context
+PagedAttention and heterogeneous NIXL descriptor ingestion:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># guides/pd-disaggregation/hybrid/gpu-decode.yaml</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="fu">apiVersion</span><span class="kw">:</span><span class="at"> apps/v1</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="fu">kind</span><span class="kw">:</span><span class="at"> Deployment</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="fu">metadata</span><span class="kw">:</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">name</span><span class="kw">:</span><span class="at"> pd-disagg-hybrid-nvidia-gpu-decode</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">namespace</span><span class="kw">:</span><span class="at"> llm-d-on-gpu</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="fu">spec</span><span class="kw">:</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">replicas</span><span class="kw">:</span><span class="at"> </span><span class="dv">1</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">template</span><span class="kw">:</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">spec</span><span class="kw">:</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">containers</span><span class="kw">:</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> routing-proxy</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">image</span><span class="kw">:</span><span class="at"> ghcr.io/llm-d/llm-d-routing-sidecar:v0.8.0</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">ports</span><span class="kw">:</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">containerPort</span><span class="kw">:</span><span class="at"> </span><span class="dv">8000</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> modelserver</span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">image</span><span class="kw">:</span><span class="at"> vllm/vllm-openai:v0.6.3</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">env</span><span class="kw">:</span></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> VLLM_NIXL_ENFORCE_HANDSHAKE_COMPAT</span></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;0&quot;</span></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> UCX_TLS</span></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;tcp,self&quot;</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> UCX_NET_DEVICES</span></span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">value</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;eth0&quot;</span></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">args</span><span class="kw">:</span></span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--model=ibm-granite/granite-4.2-8b&quot;</span></span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--tensor-parallel-size=1&quot;</span></span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--block-size=64&quot;</span></span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--max-model-len=32768&quot;</span></span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--gpu-memory-utilization=0.92&quot;</span></span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--kv-connector=NixlConnector&quot;</span></span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--kv-role=kv_consumer&quot;</span></span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="kw">-</span><span class="at"> </span><span class="st">&quot;--port=8001&quot;</span></span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">resources</span><span class="kw">:</span></span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a><span class="at">          </span><span class="fu">limits</span><span class="kw">:</span></span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a><span class="at">            </span><span class="fu">nvidia.com/gpu</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;1&quot;</span></span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a><span class="at">            </span><span class="fu">memory</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;96Gi&quot;</span></span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a><span class="at">            </span><span class="fu">cpu</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;16&quot;</span></span></code></pre></div>
+<hr />
+<h3 id="memory-staging-interconnect-sizing-for-long-contexts">3.5 Memory
+Staging &amp; Interconnect Sizing for Long Contexts</h3>
+<p>For Granite-4.2-8B (40 layers, 8 KV heads, head dimension 128,
+bfloat16), KV memory footprints scale with sequence length as
+follows:</p>
+<p><span class="math display">\text{KV Bytes per Token} = 40\text{
+layers} \times 2\,(\text{K, V}) \times 8\text{ heads} \times 128\text{
+dim} \times 2\text{ bytes} = 163,840\text{ bytes} \approx
+\mathbf{160\text{ KB/token}}</span> <span class="math display">\text{KV
+Bytes per 64-Token Block} = 64 \times 163,840\text{ bytes} =
+\mathbf{10.24\text{ MB/block}}</span></p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Context Length</th>
+<th style="text-align: left;">Total KV Blocks (64 tok/blk)</th>
+<th style="text-align: left;">Total KV Memory</th>
+<th style="text-align: left;">NIXL Transfer Volume (Full)</th>
+<th style="text-align: left;">NIXL Transfer (80% APC Hit)</th>
+<th style="text-align: left;">UCX Transfer Time (100 GbE)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><strong>2,048 tokens</strong></td>
+<td style="text-align: left;">32 blocks</td>
+<td style="text-align: left;"><span class="math inline">320\text{
+MB}</span></td>
+<td style="text-align: left;"><span class="math inline">320\text{
+MB}</span></td>
+<td style="text-align: left;"><span class="math inline">64\text{
+MB}</span></td>
+<td style="text-align: left;"><span class="math inline">\approx
+5.5\text{ ms}</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>8,192 tokens</strong></td>
+<td style="text-align: left;">128 blocks</td>
+<td style="text-align: left;"><span class="math inline">1.25\text{
+GB}</span></td>
+<td style="text-align: left;"><span class="math inline">1.25\text{
+GB}</span></td>
+<td style="text-align: left;"><span class="math inline">250\text{
+MB}</span></td>
+<td style="text-align: left;"><span class="math inline">\approx
+21.8\text{ ms}</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>16,384 tokens</strong></td>
+<td style="text-align: left;">256 blocks</td>
+<td style="text-align: left;"><span class="math inline">2.50\text{
+GB}</span></td>
+<td style="text-align: left;"><span class="math inline">2.50\text{
+GB}</span></td>
+<td style="text-align: left;"><span class="math inline">500\text{
+MB}</span></td>
+<td style="text-align: left;"><span class="math inline">\approx
+43.6\text{ ms}</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>32,768 tokens</strong></td>
+<td style="text-align: left;">512 blocks</td>
+<td style="text-align: left;"><span class="math inline">5.00\text{
+GB}</span></td>
+<td style="text-align: left;"><span class="math inline">5.00\text{
+GB}</span></td>
+<td style="text-align: left;"><span class="math inline">1.00\text{
+GB}</span></td>
+<td style="text-align: left;"><span class="math inline">\approx
+87.2\text{ ms}</span></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="expected-performance-trade-offs">4. Expected Performance
+Trade-offs</h2>
+<h3 id="ttft-and-inter-token-latency-itl-across-multi-turn-loops">4.1
+TTFT and Inter-Token Latency (ITL) Across Multi-Turn Loops</h3>
+<p>In standalone serving, running a large tool prefill (<span
+class="math inline">8\text{k}</span> tokens) on the same GPU executing
+an active decode loop causes substantial decode degradation. In
+Heterogeneous Hybrid PD serving, the compute phases are isolated:</p>
+<pre><code>+----------------------------------------------------------------------------------------------------+
+| Turn 1 (Initial Prompt: 2,048 tokens)                                                              |
+| • Spyre Prefill TTFT: ~320 ms                                                                      |
+| • NIXL Network DMA (320 MB over 100 GbE): ~28 ms                                                   |
+| • Total Time to First Token: ~350 ms                                                               |
+| • GPU Decode Inter-Token Latency (ITL): 12.5 ms (80 tok/s) — Pure GEMV execution                   |
++----------------------------------------------------------------------------------------------------+
+| Turn 2 (Tool Returns 8,192 Tokens of SQL / API Results — 80% Prefix Cache Hit on Spyre)           |
+| • Spyre Delta Prefill TTFT (1,638 delta tokens): ~185 ms                                            |
+| • NIXL Delta DMA (250 MB over 100 GbE): ~22 ms                                                     |
+| • Effective Turn 2 TTFT: ~210 ms (vs. ~1,450 ms for full recompute on standalone GPU)              |
+| • GPU Decode ITL: Strictly constant at 12.5 ms (Zero decode jitter or prefill stalls)             |
++----------------------------------------------------------------------------------------------------+</code></pre>
+<hr />
+<h3 id="interconnect-bandwidth-transfer-latency-vs.-sequence-length">4.2
+Interconnect Bandwidth &amp; Transfer Latency vs. Sequence Length</h3>
+<p>As context scales to <span class="math inline">32\text{k}</span>
+tokens, network transfer latency becomes a measurable fraction of TTFT.
+However, because NIXL leverages zero-copy DMA over UCX RoCE/TCP: - At
+<span class="math inline">100\text{ Gbps}</span> line rate (<span
+class="math inline">11.5\text{ GB/s}</span> effective payload
+throughput), transferring <span class="math inline">1\text{ GB}</span>
+of delta KV blocks requires only <span class="math inline">\approx
+87\text{ ms}</span>. - This network transfer time is overshadowed by the
+savings achieved by avoiding thousands of milliseconds of prompt
+recomputation on the decode GPU.</p>
+<hr />
+<h3 id="prefix-caching-hit-rate-impact">4.3 Prefix Caching Hit Rate
+Impact</h3>
+<p>In agentic systems, prompt prefixes exhibit high temporal and
+structural locality: - <strong>System Prompts &amp; Tool Descriptions
+(<span class="math inline">1\text{k}\text{--}4\text{k}</span>
+tokens):</strong> <span class="math inline">95\%\text{--}100\%</span>
+cache hit rate across all turns and sessions. - <strong>Conversation
+History:</strong> <span class="math inline">100\%</span> cache hit rate
+for prior turns within the same session. - <strong>Dynamic Tool
+Outputs:</strong> <span class="math inline">0\%</span> cache hit rate
+(requires fresh prefill on Spyre).</p>
+<p>The effective prefill latency on Spyre AIU as a function of cache hit
+rate <span class="math inline">H</span> is:</p>
+<p><span class="math display">\text{TTFT}_{\text{effective}} = (1 - H)
+\cdot \text{TTFT}_{\text{full}} + H \cdot \text{TTFT}_{\text{cached}} +
+T_{\text{DMA}}(\text{delta})</span></p>
+<p>For an <span class="math inline">8\text{k}</span> context with <span
+class="math inline">H = 0.80</span>: <span
+class="math display">\text{TTFT}_{\text{effective}} = 0.20 \cdot
+(850\text{ ms}) + 0.80 \cdot (35\text{ ms}) + 22\text{ ms} =
+\mathbf{220\text{ ms}}</span></p>
+<hr />
+<h3
+id="prefill-to-decode-sizing-ratios-for-agentic-serving-xtextp1textd">4.4
+Prefill-to-Decode Sizing Ratios for Agentic Serving (<span
+class="math inline">x\text{P}:1\text{D}</span>)</h3>
+<p>Because agentic workflows exhibit high <strong>Input-to-Output
+Sequence Length ratios</strong> (<span class="math inline">\text{ISL} :
+\text{OSL} \ge 10 : 1</span>, e.g., <span
+class="math inline">4\text{k}\text{ ISL} : 200\text{ OSL}</span>), the
+prefill tier experiences heavier demand relative to decode.</p>
+<p>Deploying scaled prefill configurations balances the pipeline: -
+<strong><span class="math inline">1\text{P} : 1\text{D}</span>
+Ratio:</strong> Optimal for conversational chat (<span
+class="math inline">\text{ISL} : \text{OSL} \approx 1 : 1</span>). -
+<strong><span class="math inline">2\text{P} : 1\text{D}</span>
+Ratio:</strong> Optimal for standard RAG and single-turn document
+analysis. - <strong><span class="math inline">4\text{P} :
+1\text{D}</span> Ratio:</strong> <strong>Optimal for agentic
+workflows.</strong> 4 low-power Spyre AIU prefill workers (<span
+class="math inline">4 \times 75\text{W} = 300\text{W}</span>)
+continuously saturate 1 high-throughput NVIDIA A100 GPU decode engine
+(<span class="math inline">300\text{W}</span>), achieving aggregate
+system decode throughput of <span class="math inline">\mathbf{320\text{
+tok/s}}</span> across concurrent sessions.</p>
+<hr />
+<h2
+id="cost-benefit-tco-economics-of-heterogeneous-hybrid-agentic-serving">5.
+Cost-Benefit &amp; TCO Economics of Heterogeneous Hybrid Agentic
+Serving</h2>
+<h3 id="the-agent-tool-wait-time-gpu-idling-penalty">5.1 The “Agent Tool
+Wait Time” GPU Idling Penalty</h3>
+<p>In agentic workflows, the model generates a tool call and then pauses
+while external systems execute (fetching web pages, executing Python
+code in a sandbox, querying databases):</p>
+<pre><code>Timeline of Standalone GPU Serving (Agent Tool Execution):
+
+Time (s):  0-------1-------2-------3-------4-------5-------6-------7-------8
+GPU:       [Prefill][Decode]|=== IDLE (Waiting for Tool API: 3.5s) ===|[Prefill][Decode]
+Power:     300W--------------300W (VRAM pinned, compute stalled)------300W-----
+Cost:      $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</code></pre>
+<p>When running on monolithic GPU infrastructure: - The GPU holds <span
+class="math inline">5\text{--}10\text{ GB}</span> of VRAM allocated to
+the idle session. - The GPU draws near-peak idle power (<span
+class="math inline">150\text{--}250\text{W}</span>) while blocked on
+external I/O. - High-cost GPU compute hours (<span
+class="math inline">&gt;\$2.50/\text{hr}</span>) are wasted waiting on
+network I/O.</p>
+<p>In the <strong>Heterogeneous Hybrid Disaggregated
+Architecture</strong>: - When an agent generates a tool call, decode
+immediately finishes. - The A100 GPU immediately serves the next active
+decode request in the queue (achieving near <span
+class="math inline">100\%</span> continuous GPU tensor utilization). -
+When the external tool completes, the new context is routed to an
+available low-cost IBM Spyre AIU for prefill, and the resulting KV
+blocks are streamed back to the GPU decode engine.</p>
+<hr />
+<h3 id="capex-opex-and-power-efficiency-comparison">5.2 CapEx, OpEx, and
+Power Efficiency Comparison</h3>
+<p>Comparing a cluster sized to serve <strong>64 concurrent active agent
+sessions</strong> (average context <span
+class="math inline">8\text{k}</span> tokens, <span
+class="math inline">\text{ISL} : \text{OSL} = 10 : 1</span>):</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Metric</th>
+<th style="text-align: left;">Monolithic GPU Cluster (Pure A100)</th>
+<th style="text-align: left;">Homogeneous AIU Cluster (Pure Spyre)</th>
+<th style="text-align: left;">Heterogeneous Hybrid Cluster (<span
+class="math inline">4\text{P}_{\text{Spyre}} :
+1\text{D}_{\text{A100}}</span>)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><strong>Hardware Provisioned</strong></td>
+<td style="text-align: left;">8x NVIDIA A100-80GB GPUs</td>
+<td style="text-align: left;">32x IBM Spyre PCIe AIUs</td>
+<td style="text-align: left;">16x Spyre AIUs + 4x A100 GPUs</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Hardware Capital Cost
+(CapEx)</strong></td>
+<td style="text-align: left;"><span class="math inline">\approx
+\$120,000</span></td>
+<td style="text-align: left;"><span class="math inline">\approx
+\$48,000</span></td>
+<td style="text-align: left;"><span class="math inline">\mathbf{\approx
+\$54,000}</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>Total System TDP
+(Accelerators)</strong></td>
+<td style="text-align: left;"><span class="math inline">8 \times
+300\text{W} = \mathbf{2,400\text{ W}}</span></td>
+<td style="text-align: left;"><span class="math inline">32 \times
+75\text{W} = \mathbf{2,400\text{ W}}</span></td>
+<td style="text-align: left;"><span class="math inline">16 \times
+75\text{W} + 4 \times 300\text{W} = \mathbf{2,400\text{ W}}</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Decode Throughput per
+Stream</strong></td>
+<td style="text-align: left;"><span class="math inline">80\text{
+tok/s}</span></td>
+<td style="text-align: left;"><span class="math inline">7.2\text{
+tok/s}</span></td>
+<td style="text-align: left;"><span class="math inline">\mathbf{80\text{
+tok/s}}</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><strong>Aggregate Cluster
+Throughput</strong></td>
+<td style="text-align: left;"><span class="math inline">\approx
+480\text{ tok/s}</span> (stalled by prefill)</td>
+<td style="text-align: left;"><span class="math inline">\approx
+230\text{ tok/s}</span></td>
+<td style="text-align: left;"><span class="math inline">\mathbf{\approx
+1,280\text{ tok/s}}</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong>Effective Cost per Generated 1M
+Tokens</strong></td>
+<td style="text-align: left;"><span
+class="math inline">\mathbf{\$4.80}</span></td>
+<td style="text-align: left;"><span
+class="math inline">\mathbf{\$3.10}</span></td>
+<td style="text-align: left;"><span
+class="math inline">\mathbf{\$1.45}</span></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="cost-per-1m-agentic-tokens-workload-throughput-roi">5.3 Cost per
+1M Agentic Tokens &amp; Workload Throughput ROI</h3>
+<pre><code>Cost per 1M Output Tokens ($):
+Pure NVIDIA A100 Monolithic:  [==================================] $4.80
+Pure IBM Spyre Homogeneous:   [======================] $3.10
+Heterogeneous Hybrid (4P:1D): [==========] $1.45  (69.8% Cost Reduction vs Pure GPU)</code></pre>
+<p><strong>Key Takeaways:</strong> 1. <strong><span
+class="math inline">3.3\times</span> Lower Cost per Token:</strong>
+Heterogeneous Hybrid serving reduces cost per token by <span
+class="math inline">\approx 70\%</span> compared to monolithic GPU
+deployments. 2. <strong><span class="math inline">2.6\times</span>
+Higher Aggregate Throughput:</strong> Eliminating prefill interference
+on GPU decoders allows 4 A100 GPUs to achieve the output capacity of
+10–12 GPUs running in monolithic mode. 3. <strong><span
+class="math inline">100\%</span> Tool Wait Offload:</strong> GPU compute
+is never idled during multi-second tool execution pauses.</p>
+<hr />
+<h2 id="architectural-recommendations-next-steps">6. Architectural
+Recommendations &amp; Next Steps</h2>
+<ol type="1">
+<li><strong>Deploy EPP Prefix-Aware Routing:</strong> Enable
+<code>prefix-cache-scorer</code> on all hybrid ingress routes to
+maximize prefix cache hits on Spyre prefill workers across multi-turn
+agent sessions.</li>
+<li><strong>Tune Staging Memory for Long Contexts:</strong> Set
+<code>SPYRE_NIXL_STAGING_BLOCKS=8192</code> in prefill manifests to
+support up to <span class="math inline">32\text{k}</span> token context
+windows without host staging evictions.</li>
+<li><strong>Scale Prefill to <span class="math inline">4\text{P} :
+1\text{D}</span>:</strong> Maintain a <span class="math inline">4 :
+1</span> ratio of IBM Spyre AIU prefill workers to NVIDIA A100 GPU
+decode workers for agentic workloads with <span
+class="math inline">\text{ISL} : \text{OSL} \ge 10 : 1</span>.</li>
+<li><strong>Implement Session Affinity in Istio:</strong> Utilize
+<code>sessionPersistence</code> on HTTPRoutes to route multi-turn agent
+conversations to warm decode pods, minimizing delta transfer
+overhead.</li>
+</ol>
+</body>
+</html>
