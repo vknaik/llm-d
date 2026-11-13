@@ -51,7 +51,9 @@ is accepted by vLLM's ``KVConnectorFactory`` without any
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
+import os
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -78,6 +80,12 @@ from vllm.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
 )
 from vllm.distributed.kv_transfer.kv_connector.v1.nixl.tp_mapping import (
     TransferTopology,
+)
+from vllm.distributed.kv_transfer.kv_connector.v1.offloading_connector import (
+    OffloadingConnector,
+)
+from vllm.distributed.kv_transfer.kv_connector.v1.offloading.worker import (
+    OffloadingConnectorWorker,
 )
 from vllm.logger import init_logger
 
@@ -291,6 +299,188 @@ class SpyreNixlPushConnectorWorker(_SpyreRegisterKVCachesMixin, NixlPushConnecto
 
 
 # ---------------------------------------------------------------------------
+# Storage Engine & Offload Worker for NVMe Multi-Tier Hierarchy (Phase 1)
+# ---------------------------------------------------------------------------
+
+class SpyreNVMeStorageEngine:
+    """High-throughput asynchronous NVMe storage engine for Spyre KV offloading.
+
+    Persists and restores contiguous logical KV cache blocks to/from local
+    NVMe storage (/mnt/nvme-kv-cache) using two-stage asynchronous DMA.
+    """
+
+    def __init__(
+        self,
+        root_dir: str = "/mnt/nvme-kv-cache",
+        max_workers: int = 8,
+    ) -> None:
+        self.root_dir = root_dir
+        try:
+            os.makedirs(self.root_dir, exist_ok=True)
+        except Exception as e:
+            logger.warning(
+                "%s Could not create root_dir=%s: %s (falling back to /tmp/nvme-kv-cache)",
+                _DIAG, self.root_dir, e,
+            )
+            self.root_dir = "/tmp/nvme-kv-cache"
+            os.makedirs(self.root_dir, exist_ok=True)
+
+        self.executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix="spyre-nvme-io",
+        )
+        logger.info(
+            "%s SpyreNVMeStorageEngine initialized: root_dir=%s, workers=%d",
+            _DIAG, self.root_dir, max_workers,
+        )
+
+    def write_block_direct(self, file_path: str, data_bytes: bytes) -> int:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "wb") as f:
+            written = f.write(data_bytes)
+            f.flush()
+            os.fsync(f.fileno())
+        return written
+
+    def read_block_direct(self, file_path: str) -> bytes:
+        with open(file_path, "rb") as f:
+            return f.read()
+
+    def async_store(self, job_id: str, file_path: str, data_bytes: bytes, callback=None):
+        def _task():
+            t0 = time.perf_counter()
+            size = self.write_block_direct(file_path, data_bytes)
+            dt = time.perf_counter() - t0
+            return job_id, True, size, dt
+
+        future = self.executor.submit(_task)
+        if callback:
+            future.add_done_callback(callback)
+        return future
+
+    def async_load(self, job_id: str, file_path: str, callback=None):
+        def _task():
+            t0 = time.perf_counter()
+            data = self.read_block_direct(file_path)
+            dt = time.perf_counter() - t0
+            return job_id, True, data, dt
+
+        future = self.executor.submit(_task)
+        if callback:
+            future.add_done_callback(callback)
+        return future
+
+
+class SpyreNixlStorageWorker(_SpyreRegisterKVCachesMixin, OffloadingConnectorWorker):
+    """Spyre-aware storage offload worker for 3-tier memory hierarchy.
+
+    Coordinates two-stage DMA transfers:
+      1. Stage 1 (AIU <-> Host DRAM): SpyrePagedKVCache <-> Pinned Staging Buffers
+      2. Stage 2 (Host DRAM <-> NVMe): Pinned Staging Buffers <-> Local NVMe Filesystem
+    """
+
+    def __init__(
+        self,
+        spec: Any,
+        vllm_config: VllmConfig,
+        kv_cache_config: "KVCacheConfig",
+    ) -> None:
+        super().__init__(spec, vllm_config, kv_cache_config)
+        self.storage_engine = SpyreNVMeStorageEngine()
+        self._pending_store_jobs: list[Any] = []
+        self._pending_load_jobs: dict[str, Any] = {}
+        logger.info("%s SpyreNixlStorageWorker initialized successfully", _DIAG)
+
+    def prepare_store_kv(self, metadata: Any) -> None:
+        store_jobs = getattr(metadata, "store_jobs", {})
+        for job_id, entry in store_jobs.items():
+            self._pending_store_jobs.append((job_id, entry))
+
+    def start_kv_transfers(self, metadata: Any) -> None:
+        # 1. Process store jobs: AIU -> Host DRAM -> NVMe SSD
+        for job_id, entry in self._pending_store_jobs:
+            src_block_ids = getattr(entry.src_spec, "block_ids", [])
+            if hasattr(self, "copy_blocks") and hasattr(self, "device_kv_caches"):
+                # Stage 1: D2H copy from Spyre AIU device DRAM to pinned host staging
+                self.copy_blocks(
+                    self.device_kv_caches,
+                    self.host_xfer_buffers,
+                    src_block_ids,
+                    src_block_ids,
+                    direction="d2h",
+                )
+
+            # Stage 2: Asynchronous write from host staging to NVMe storage
+            t0 = time.perf_counter()
+            total_bytes = 0
+            for ln in getattr(self, "device_kv_caches", {}):
+                k_t = self.host_xfer_buffers.get(ln + "_k")
+                v_t = self.host_xfer_buffers.get(ln + "_v")
+                if k_t is not None and v_t is not None:
+                    for b_id in src_block_ids:
+                        k_file = os.path.join(self.storage_engine.root_dir, f"{ln}_k_{b_id}.bin")
+                        v_file = os.path.join(self.storage_engine.root_dir, f"{ln}_v_{b_id}.bin")
+                        total_bytes += self.storage_engine.write_block_direct(
+                            k_file, bytes(k_t[b_id].untyped_storage())
+                        )
+                        total_bytes += self.storage_engine.write_block_direct(
+                            v_file, bytes(v_t[b_id].untyped_storage())
+                        )
+            dt = time.perf_counter() - t0
+            logger.debug(
+                "%s Store job %s completed: %d bytes written in %.3fs (%.2f MB/s)",
+                _DIAG, job_id, total_bytes, dt,
+                (total_bytes / (1024 * 1024)) / max(dt, 1e-6),
+            )
+            if hasattr(self, "_connector_worker_meta"):
+                self._connector_worker_meta.mark_completed(job_id)
+        self._pending_store_jobs.clear()
+
+        # 2. Process load jobs: NVMe SSD -> Host DRAM -> AIU
+        load_jobs = getattr(metadata, "load_jobs", {})
+        for job_id, entry in load_jobs.items():
+            dst_block_ids = getattr(entry.dst_spec, "block_ids", [])
+            t0 = time.perf_counter()
+            total_bytes = 0
+            # Stage 1: Read from NVMe storage into host staging buffers
+            for ln in getattr(self, "device_kv_caches", {}):
+                k_t = self.host_xfer_buffers.get(ln + "_k")
+                v_t = self.host_xfer_buffers.get(ln + "_v")
+                if k_t is not None and v_t is not None:
+                    for b_id in dst_block_ids:
+                        k_file = os.path.join(self.storage_engine.root_dir, f"{ln}_k_{b_id}.bin")
+                        v_file = os.path.join(self.storage_engine.root_dir, f"{ln}_v_{b_id}.bin")
+                        if os.path.exists(k_file) and os.path.exists(v_file):
+                            k_data = self.storage_engine.read_block_direct(k_file)
+                            v_data = self.storage_engine.read_block_direct(v_file)
+                            k_t[b_id].copy_(
+                                torch.frombuffer(k_data, dtype=k_t.dtype).reshape(k_t[b_id].shape)
+                            )
+                            v_t[b_id].copy_(
+                                torch.frombuffer(v_data, dtype=v_t.dtype).reshape(v_t[b_id].shape)
+                            )
+                            total_bytes += len(k_data) + len(v_data)
+
+            # Stage 2: H2D copy from host staging buffers to Spyre AIU device memory
+            if hasattr(self, "copy_blocks") and hasattr(self, "device_kv_caches"):
+                self.copy_blocks(
+                    self.host_xfer_buffers,
+                    self.device_kv_caches,
+                    dst_block_ids,
+                    dst_block_ids,
+                    direction="h2d",
+                )
+            dt = time.perf_counter() - t0
+            logger.debug(
+                "%s Load job %s completed: %d bytes restored in %.3fs (%.2f MB/s)",
+                _DIAG, job_id, total_bytes, dt,
+                (total_bytes / (1024 * 1024)) / max(dt, 1e-6),
+            )
+            if hasattr(self, "_connector_worker_meta"):
+                self._connector_worker_meta.mark_completed(job_id)
+
+
+# ---------------------------------------------------------------------------
 # Connector facades — override __init__ to substitute the Spyre worker
 # ---------------------------------------------------------------------------
 
@@ -350,21 +540,41 @@ class SpyreNixlPushConnector(NixlPushConnector):
             )
 
 
+class SpyreOffloadingConnector(OffloadingConnector):
+    """Spyre-aware KV offloading connector for NVMe multi-tier storage."""
+
+    def __init__(
+        self,
+        vllm_config: VllmConfig,
+        role: KVConnectorRole,
+        kv_cache_config: "KVCacheConfig",
+    ) -> None:
+        super().__init__(vllm_config, role, kv_cache_config)
+        if role == KVConnectorRole.WORKER:
+            assert self.connector_worker is not None
+            self.connector_worker.__class__ = SpyreNixlStorageWorker
+            logger.info(
+                "%s SpyreOffloadingConnector: worker upgraded to SpyreNixlStorageWorker",
+                _DIAG,
+            )
+
+
 # ---------------------------------------------------------------------------
 # Registration helper
 # ---------------------------------------------------------------------------
 
 def register_spyre_nixl_connectors() -> None:
-    """Register SpyreNixlConnector and SpyreNixlPushConnector with vLLM.
+    """Register Spyre connectors with vLLM.
 
     Call this once from ``spyre_inference.__init__.register()`` so that
-    ``--kv-connector SpyreNixlConnector`` is accepted without
-    ``--kv-connector-module-path``.
+    ``--kv-connector SpyreNixlConnector`` or ``--kv-connector SpyreOffloadingConnector``
+    is accepted without ``--kv-connector-module-path``.
     """
     _MODULE = "spyre_inference.distributed.kv_transfer.kv_connector.v1.nixl.spyre_connector"
     for name, cls_name in (
         ("SpyreNixlConnector", "SpyreNixlConnector"),
         ("SpyreNixlPushConnector", "SpyreNixlPushConnector"),
+        ("SpyreOffloadingConnector", "SpyreOffloadingConnector"),
     ):
         try:
             KVConnectorFactory.register_connector(name, _MODULE, cls_name)

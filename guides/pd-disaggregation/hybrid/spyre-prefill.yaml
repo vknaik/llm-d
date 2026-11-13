@@ -30,7 +30,7 @@ spec:
         llm-d.ai/accelerator-vendor: ibm
     spec:
       serviceAccountName: pd-disaggregation-hybrid-sa
-      schedulerName: spyre-scheduler
+      schedulerName: default-scheduler
       nodeSelector:
         ibm.com/spyre.product: IBM_Spyre
         kubernetes.io/hostname: p1-worker-63
@@ -183,8 +183,8 @@ spec:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 15
-            periodSeconds: 15
+            initialDelaySeconds: 30
+            periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 120
           livenessProbe:
@@ -205,7 +205,7 @@ spec:
         - name: dshm
           emptyDir:
             medium: Memory
-            sizeLimit: 20Gi
+            sizeLimit: 64Gi
         - name: torch-compile-cache
           emptyDir: {}
         - name: vllm-config
