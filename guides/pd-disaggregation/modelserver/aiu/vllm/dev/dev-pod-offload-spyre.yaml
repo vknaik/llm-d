@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-offload-spyre-dev
+  namespace: llm-d-on-aiu
+  labels:
+    app: test-offload-spyre-dev
+    role: offload-test
+spec:
+  schedulerName: default-scheduler
+  serviceAccountName: pd-disaggregation-ibm-aiu-vllm-sa
+  nodeSelector:
+    kubernetes.io/hostname: p1-worker-63
+  containers:
+  - name: modelserver
+    image: image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl-latest:v21
+    imagePullPolicy: IfNotPresent
+    command: ["/bin/bash", "-c", "trap : TERM INT; sleep infinity & wait"]
+    env:
+    - name: DEV_SHORTNAME
+      value: test-offload
+    - name: HF_HOME
+      value: /model-cache/models/huggingface_cache
+    - name: HF_HUB_DISABLE_XET
+      value: "1"
+    - name: TORCH_SENDNN_CACHE_ENABLE
+      value: "1"
+    - name: TORCH_SENDNN_CACHE_DIR
+      value: /share/test2-prefill/workspace/torch_sendnn_cache
+    - name: TORCH_INDUCTOR_CACHE_DIR
+      value: /share/test2-prefill/workspace/torch_inductor_cache
+    - name: MODEL_PATH
+      value: /model-cache/models/ibm-granite/granite-4.2-8b
+    - name: SERVED_MODEL_NAME
+      value: granite-8b
+    resources:
+      limits:
+        ibm.com/spyre_pf: "1"
+      requests:
+        ibm.com/spyre_pf: "1"
+    ports:
+    - containerPort: 18001
+      name: http
+    volumeMounts:
+    - name: dev-shm
+      mountPath: /dev/shm
+    - name: model-cache
+      mountPath: /model-cache
+    - name: share
+      mountPath: /share
+    - name: nvme-kv-cache
+      mountPath: /mnt/nvme-kv-cache
+  terminationGracePeriodSeconds: 0
+  volumes:
+  - name: dev-shm
+    emptyDir:
+      medium: Memory
+      sizeLimit: 32Gi
+  - name: model-cache
+    persistentVolumeClaim:
+      claimName: model-pvc
+  - name: share
+    persistentVolumeClaim:
+      claimName: llm-d-vllm-spyre
+  - name: nvme-kv-cache
+    hostPath:
+      path: /var/mnt/nvme-kv-cache
+      type: DirectoryOrCreate

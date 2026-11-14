@@ -11,30 +11,34 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
 # License for the specific language governing permissions and limitations under
 # the License.
-"""Spyre-specific NIXL KV-transfer connector.
+"""Spyre-specific NIXL KV-transfer and NVMe Hierarchical Offloading Connector.
 
-Instead of replacing the entire upstream
-``vllm/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py``, which
-breaks every time vLLM changes an internal signature, this module defines:
+This module defines:
 
 ``_SpyreRegisterKVCachesMixin``
-    A mixin that overrides only ``register_kv_caches()`` to handle Spyre's
+    A mixin that overrides ``register_kv_caches()`` to handle Spyre's
     CPU-staging ``SpyrePagedKVCache`` layout.
 
 ``SpyreNixlPullConnectorWorker``
-    Subclass of :class:`NixlPullConnectorWorker` + mixin.  Passes all
-    upstream ``isinstance(worker, NixlPullConnectorWorker)`` checks.
+    Subclass of :class:`NixlPullConnectorWorker` + mixin.
 
 ``SpyreNixlPushConnectorWorker``
-    Subclass of :class:`NixlPushConnectorWorker` + mixin.  Passes all
-    upstream ``isinstance(worker, NixlPushConnectorWorker)`` checks.
+    Subclass of :class:`NixlPushConnectorWorker` + mixin.
 
-``SpyreNixlConnector``
-    Subclass of :class:`NixlPullConnector` that instantiates
-    ``SpyreNixlPullConnectorWorker`` instead of ``NixlPullConnectorWorker``.
+``SpyreNVMeStorageEngine``
+    High-throughput direct NVMe I/O engine supporting packed logical block
+    serialization (``[PACKED HND]`` format, 10.24 MB per block).
 
-``SpyreNixlPushConnector``
-    Subclass of :class:`NixlPushConnector` using ``SpyreNixlPushConnectorWorker``.
+``Spyre3TierCacheManager``
+    3-Tier LRU Cache Manager (Tier 1: Device DRAM <-> Tier 2: Host DRAM <-> Tier 3: Local NVMe SSD)
+    with prefix hashing, automated eviction, and telemetry.
+
+``SpyreNixlStorageWorker``
+    Storage offloading worker orchestrating two-stage DMA transfers and 3-tier LRU
+    eviction/promotion.
+
+``SpyreOffloadingConnector``
+    Offloading connector facade registered with vLLM's ``KVConnectorFactory``.
 
 Registration
 ~~~~~~~~~~~~
@@ -42,18 +46,19 @@ Registration
 ``spyre_inference.__init__.register()`` so that::
 
     --kv-connector SpyreNixlConnector
+    --kv-connector SpyreOffloadingConnector
 
-is accepted by vLLM's ``KVConnectorFactory`` without any
-``--kv-connector-module-path`` override and without modifying vLLM's own
-``factory.py``.  (For robustness the manifests also pass
-``kv_connector_module_path`` which bypasses the registry entirely.)
+are accepted by vLLM's ``KVConnectorFactory``.
 """
 
 from __future__ import annotations
 
+import collections
 import concurrent.futures
+import hashlib
 import logging
 import os
+import struct
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -95,55 +100,37 @@ if TYPE_CHECKING:
 logger = init_logger(__name__)
 
 _DIAG = "[SpyreDiag]"
+_PACKED_MAGIC = b"SPYRE_KV_V1\x00"
+_HEADER_STRUCT = struct.Struct(">12sIIIIQI")  # magic(12), num_layers, num_heads, head_size, block_size, total_bytes, flags
 
 
 # ---------------------------------------------------------------------------
-# Mixin: only register_kv_caches() is Spyre-specific
+# Mixin: register_kv_caches() for SpyrePagedKVCache
 # ---------------------------------------------------------------------------
 
 class _SpyreRegisterKVCachesMixin:
-    """Mixin that overrides register_kv_caches() for SpyrePagedKVCache.
-
-    Delegates to super() (the upstream worker) for all other cache types so
-    this is safe on non-Spyre platforms.  Must appear before the upstream
-    worker class in the MRO so our override is found first.
-    """
+    """Mixin that overrides register_kv_caches() for SpyrePagedKVCache."""
 
     def register_kv_caches(self, kv_caches: dict[str, Any]) -> None:
-        """Register KV caches with NIXL, handling SpyrePagedKVCache specially.
-
-        SpyrePagedKVCache stores KV as individually-allocated per-page CPU
-        tensors (non-contiguous).  NixlConnector requires a contiguous layout
-        per layer.  We allocate contiguous CPU staging tensors, register them
-        with NIXL, and wire up ``_spyre_copy_blocks`` as ``self.copy_blocks``.
-
-        For any other cache type the upstream implementation is called directly.
-        """
         if not kv_caches:
             logger.warning(
-                "%s register_kv_caches called with empty dict — "
-                "NIXL memory registration skipped.",
+                "%s register_kv_caches called with empty dict — NIXL registration skipped.",
                 _DIAG,
             )
             return
 
         first_cache = next(iter(kv_caches.values()))
         if first_cache.__class__.__name__ != "SpyrePagedKVCache":
-            # Non-Spyre path: delegate to upstream unchanged.
             super().register_kv_caches(kv_caches)
             return
 
-        # -----------------------------------------------------------------
-        # Spyre path: SpyrePagedKVCache staging-tensor registration
-        # -----------------------------------------------------------------
         t0 = time.perf_counter()
-
         first_k_page = first_cache.k_pages[0]
-        page_shape = tuple(first_k_page.shape)   # (num_kv_heads, block_size, head_size)
+        page_shape = tuple(first_k_page.shape)  # (num_kv_heads, block_size, head_size)
         page_dtype = first_k_page.dtype
         num_blocks = len(first_cache.k_pages)
         num_layers = len(kv_caches)
-        staging_shape = (num_blocks,) + page_shape  # contiguous per layer
+        staging_shape = (num_blocks,) + page_shape
 
         logger.info(
             "%s register_kv_caches START: SpyrePagedKVCache detected, "
@@ -151,7 +138,6 @@ class _SpyreRegisterKVCachesMixin:
             _DIAG, num_layers, num_blocks, page_shape, page_dtype,
         )
 
-        # One CPU staging tensor per layer for K and V.
         staging_k: dict[str, torch.Tensor] = {
             ln: torch.zeros(staging_shape, dtype=page_dtype, device="cpu")
             for ln in kv_caches
@@ -161,8 +147,6 @@ class _SpyreRegisterKVCachesMixin:
             for ln in kv_caches
         }
 
-        # Store original SpyrePaged caches; expose staging under _k/_v keys
-        # so inherited pull/push workers can dispatch through copy_blocks.
         self.device_kv_caches = kv_caches
         self.host_xfer_buffers = {
             **{ln + "_k": t for ln, t in staging_k.items()},
@@ -191,7 +175,7 @@ class _SpyreRegisterKVCachesMixin:
 
         self.copy_blocks = _spyre_copy_blocks
 
-        # --- Full NIXL registration using the contiguous staging tensors ---
+        # NIXL registration setup
         self.transfer_topo = TransferTopology(
             tp_rank=self.tp_rank,
             tp_size=self.world_size,
@@ -207,9 +191,8 @@ class _SpyreRegisterKVCachesMixin:
             self.vllm_config, self.backend_name,
             self.transfer_topo.cross_layers_blocks,
         )
-        self.device_id = 0  # CPU staging tensors have no GPU device index
+        self.device_id = 0
 
-        # Register all staging tensors with NIXL (K then V per layer).
         caches_data = []
         seen_base_addresses: list[int] = []
         for layer_name in kv_caches:
@@ -233,7 +216,6 @@ class _SpyreRegisterKVCachesMixin:
         self.nixl_wrapper.register_memory(descs, backends=self.nixl_backends)
         self._registered_descs.append(descs)
 
-        # Build NixlAgentMetadata for handshake.
         agent_metadata = NixlAgentMetadata(
             engine_id=self.engine_id,
             agent_metadata=self.nixl_wrapper.get_agent_metadata(),
@@ -256,63 +238,45 @@ class _SpyreRegisterKVCachesMixin:
             agent_metadata_bytes=encoder.encode(agent_metadata),
         )
 
-        # Build local src transfer handle (producer side).
         src_blocks_data = self._build_fa_local(seen_base_addresses, 1)
         self.src_blocks_data = src_blocks_data
         src_descs = self.nixl_wrapper.get_xfer_descs(
             src_blocks_data, self.nixl_memory_type
         )
-        t_prep = time.perf_counter()
-        logger.info(
-            "%s prep_xfer_dlist(src/local) start: num_descs=%d",
-            _DIAG, len(src_blocks_data),
-        )
         src_handle = self.nixl_wrapper.prep_xfer_dlist("NIXL_INIT_AGENT", src_descs)
-        logger.info(
-            "%s prep_xfer_dlist(src/local) done %.3fs",
-            _DIAG, time.perf_counter() - t_prep,
-        )
         self.src_xfer_handles_by_block_size[self.block_size] = src_handle
 
         logger.info(
-            "%s register_kv_caches DONE: registered %d CPU staging regions "
-            "(%d layers × K+V), num_blocks=%d, page_bytes=%d, shape=%s, "
-            "elapsed=%.3fs",
-            _DIAG, self.num_regions, num_layers, num_blocks,
-            self.block_len_per_layer[0] if self.block_len_per_layer else 0,
-            page_shape, time.perf_counter() - t0,
+            "%s register_kv_caches DONE: %d regions, num_blocks=%d, elapsed=%.3fs",
+            _DIAG, self.num_regions, num_blocks, time.perf_counter() - t0,
         )
 
 
 # ---------------------------------------------------------------------------
-# Concrete worker subclasses — one per upstream worker type
+# Concrete worker subclasses for Pull and Push NIXL
 # ---------------------------------------------------------------------------
 
 class SpyreNixlPullConnectorWorker(_SpyreRegisterKVCachesMixin, NixlPullConnectorWorker):
-    """Spyre-aware pull worker.  Passes isinstance(w, NixlPullConnectorWorker)."""
+    """Spyre-aware pull worker."""
     pass
 
 
 class SpyreNixlPushConnectorWorker(_SpyreRegisterKVCachesMixin, NixlPushConnectorWorker):
-    """Spyre-aware push worker.  Passes isinstance(w, NixlPushConnectorWorker)."""
+    """Spyre-aware push worker."""
     pass
 
 
 # ---------------------------------------------------------------------------
-# Storage Engine & Offload Worker for NVMe Multi-Tier Hierarchy (Phase 1)
+# High-Throughput NVMe Storage Engine (Phase 1 & Phase 2)
 # ---------------------------------------------------------------------------
 
 class SpyreNVMeStorageEngine:
-    """High-throughput asynchronous NVMe storage engine for Spyre KV offloading.
-
-    Persists and restores contiguous logical KV cache blocks to/from local
-    NVMe storage (/mnt/nvme-kv-cache) using two-stage asynchronous DMA.
-    """
+    """Direct zero-copy NVMe storage engine supporting consolidated logical block files."""
 
     def __init__(
         self,
         root_dir: str = "/mnt/nvme-kv-cache",
-        max_workers: int = 8,
+        max_workers: int = 16,
     ) -> None:
         self.root_dir = root_dir
         try:
@@ -330,7 +294,7 @@ class SpyreNVMeStorageEngine:
             thread_name_prefix="spyre-nvme-io",
         )
         logger.info(
-            "%s SpyreNVMeStorageEngine initialized: root_dir=%s, workers=%d",
+            "%s SpyreNVMeStorageEngine ready: root_dir=%s, workers=%d",
             _DIAG, self.root_dir, max_workers,
         )
 
@@ -346,38 +310,222 @@ class SpyreNVMeStorageEngine:
         with open(file_path, "rb") as f:
             return f.read()
 
-    def async_store(self, job_id: str, file_path: str, data_bytes: bytes, callback=None):
-        def _task():
-            t0 = time.perf_counter()
-            size = self.write_block_direct(file_path, data_bytes)
-            dt = time.perf_counter() - t0
-            return job_id, True, size, dt
+    def pack_and_write_block(
+        self,
+        block_id: int,
+        layer_names: list[str],
+        staging_buffers: dict[str, torch.Tensor],
+        file_path: str | None = None,
+    ) -> tuple[str, int, float]:
+        """Pack all layers (K & V) for a single logical block into one file using zero-copy streaming."""
+        if file_path is None:
+            file_path = os.path.join(self.root_dir, f"block_{block_id:06d}.bin")
 
-        future = self.executor.submit(_task)
+        t0 = time.perf_counter()
+        first_k = staging_buffers[layer_names[0] + "_k"][block_id]
+        num_layers = len(layer_names)
+        num_heads = first_k.shape[0]
+        block_size = first_k.shape[1]
+        head_size = first_k.shape[2]
+
+        page_bytes = first_k.untyped_storage().nbytes()
+        total_payload_bytes = num_layers * 2 * page_bytes
+        header = _HEADER_STRUCT.pack(
+            _PACKED_MAGIC,
+            num_layers,
+            num_heads,
+            head_size,
+            block_size,
+            total_payload_bytes,
+            0,  # flags
+        )
+
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "wb") as f:
+            f.write(header)
+            for ln in layer_names:
+                k_t = staging_buffers[ln + "_k"][block_id]
+                v_t = staging_buffers[ln + "_v"][block_id]
+                f.write(k_t.view(torch.uint8).numpy())
+                f.write(v_t.view(torch.uint8).numpy())
+            f.flush()
+            os.fsync(f.fileno())
+
+        written = len(header) + total_payload_bytes
+        dt = time.perf_counter() - t0
+        return file_path, written, dt
+
+    def read_and_unpack_block(
+        self,
+        file_path: str,
+        block_id: int,
+        layer_names: list[str],
+        staging_buffers: dict[str, torch.Tensor],
+    ) -> tuple[int, float]:
+        """Read and unpack a consolidated logical block directly into staging using zero-copy readinto."""
+        t0 = time.perf_counter()
+        with open(file_path, "rb") as f:
+            header_len = _HEADER_STRUCT.size
+            header = f.read(header_len)
+            magic, num_layers, num_heads, head_size, block_size, total_payload_bytes, flags = (
+                _HEADER_STRUCT.unpack(header)
+            )
+            if magic != _PACKED_MAGIC:
+                raise ValueError(f"Invalid block magic header: {magic}")
+
+            for ln in layer_names:
+                k_t = staging_buffers[ln + "_k"][block_id]
+                v_t = staging_buffers[ln + "_v"][block_id]
+                f.readinto(k_t.view(torch.uint8).numpy())
+                f.readinto(v_t.view(torch.uint8).numpy())
+
+        total_bytes = header_len + total_payload_bytes
+        dt = time.perf_counter() - t0
+        return total_bytes, dt
+
+    def async_pack_and_write(self, block_id: int, layer_names: list[str], staging_buffers: dict[str, torch.Tensor], file_path: str | None = None, callback=None):
+        future = self.executor.submit(self.pack_and_write_block, block_id, layer_names, staging_buffers, file_path)
         if callback:
             future.add_done_callback(callback)
         return future
 
-    def async_load(self, job_id: str, file_path: str, callback=None):
-        def _task():
-            t0 = time.perf_counter()
-            data = self.read_block_direct(file_path)
-            dt = time.perf_counter() - t0
-            return job_id, True, data, dt
-
-        future = self.executor.submit(_task)
+    def async_read_and_unpack(self, file_path: str, block_id: int, layer_names: list[str], staging_buffers: dict[str, torch.Tensor], callback=None):
+        future = self.executor.submit(self.read_and_unpack_block, file_path, block_id, layer_names, staging_buffers)
         if callback:
             future.add_done_callback(callback)
         return future
 
+
+# ---------------------------------------------------------------------------
+# 3-Tier Hierarchical LRU Cache Manager (Phase 2)
+# ---------------------------------------------------------------------------
+
+class Spyre3TierCacheManager:
+    """3-Tier Hierarchical Cache Manager for IBM Spyre AIU serving.
+
+    Hierarchy:
+      - Tier 1: Device DRAM / SRAM (Active hot working set)
+      - Tier 2: Host DRAM Pinned Staging Pool (Warm cache)
+      - Tier 3: Local Solid-State NVMe Storage (Cold prefix persistent store)
+    """
+
+    def __init__(
+        self,
+        max_tier1_blocks: int = 512,
+        max_tier2_blocks: int = 2048,
+        max_tier3_blocks: int = 32768,
+        storage_engine: SpyreNVMeStorageEngine | None = None,
+    ) -> None:
+        self.max_tier1_blocks = max_tier1_blocks
+        self.max_tier2_blocks = max_tier2_blocks
+        self.max_tier3_blocks = max_tier3_blocks
+        self.storage_engine = storage_engine or SpyreNVMeStorageEngine()
+
+        # LRU queues per tier (maps prefix_hash -> metadata)
+        self.tier1_lru: collections.OrderedDict[str, dict[str, Any]] = collections.OrderedDict()
+        self.tier2_lru: collections.OrderedDict[str, dict[str, Any]] = collections.OrderedDict()
+        self.tier3_lru: collections.OrderedDict[str, dict[str, Any]] = collections.OrderedDict()
+
+        # Reverse indices
+        self.block_to_hash: dict[int, str] = {}
+        self.hash_to_file: dict[str, str] = {}
+
+        # Telemetry metrics
+        self.stats = {
+            "tier1_hits": 0,
+            "tier2_hits": 0,
+            "tier3_hits": 0,
+            "misses": 0,
+            "evictions_t1_t2": 0,
+            "evictions_t2_t3": 0,
+            "total_bytes_offloaded": 0,
+            "total_bytes_restored": 0,
+        }
+        logger.info(
+            "%s Spyre3TierCacheManager initialized: T1(Device)=%d blks, T2(Host)=%d blks, T3(NVMe)=%d blks",
+            _DIAG, max_tier1_blocks, max_tier2_blocks, max_tier3_blocks,
+        )
+
+    @staticmethod
+    def compute_prefix_hash(token_ids: list[int] | tuple[int, ...]) -> str:
+        """Compute deterministic SHA-256 hash for prefix token sequences."""
+        hasher = hashlib.sha256()
+        hasher.update(struct.pack(f">{len(token_ids)}q", *token_ids))
+        return hasher.hexdigest()[:32]
+
+    def lookup_prefix(self, prefix_hash: str) -> tuple[str | None, dict[str, Any] | None]:
+        """Lookup prefix in the 3-tier hierarchy."""
+        if prefix_hash in self.tier1_lru:
+            self.stats["tier1_hits"] += 1
+            self.tier1_lru.move_to_end(prefix_hash)
+            return "tier1", self.tier1_lru[prefix_hash]
+
+        if prefix_hash in self.tier2_lru:
+            self.stats["tier2_hits"] += 1
+            self.tier2_lru.move_to_end(prefix_hash)
+            return "tier2", self.tier2_lru[prefix_hash]
+
+        if prefix_hash in self.tier3_lru:
+            self.stats["tier3_hits"] += 1
+            self.tier3_lru.move_to_end(prefix_hash)
+            return "tier3", self.tier3_lru[prefix_hash]
+
+        self.stats["misses"] += 1
+        return None, None
+
+    def record_tier1_block(self, block_id: int, prefix_hash: str, token_ids: list[int]) -> list[str]:
+        """Record newly computed block in Tier 1; triggers eviction if threshold exceeded."""
+        evicted_hashes = []
+        if len(self.tier1_lru) >= self.max_tier1_blocks:
+            # Evict LRU block from Tier 1 to Tier 2
+            old_hash, meta = self.tier1_lru.popitem(last=False)
+            self.stats["evictions_t1_t2"] += 1
+            self.tier2_lru[old_hash] = meta
+            evicted_hashes.append(old_hash)
+
+            if len(self.tier2_lru) > self.max_tier2_blocks:
+                # Cascade evict from Tier 2 to Tier 3 (NVMe)
+                t2_hash, t2_meta = self.tier2_lru.popitem(last=False)
+                self.stats["evictions_t2_t3"] += 1
+                self.tier3_lru[t2_hash] = t2_meta
+
+        meta = {
+            "block_id": block_id,
+            "prefix_hash": prefix_hash,
+            "token_ids": token_ids,
+            "inserted_at": time.time(),
+        }
+        self.tier1_lru[prefix_hash] = meta
+        self.block_to_hash[block_id] = prefix_hash
+        return evicted_hashes
+
+    def get_summary_stats(self) -> dict[str, Any]:
+        total_lookups = sum([
+            self.stats["tier1_hits"],
+            self.stats["tier2_hits"],
+            self.stats["tier3_hits"],
+            self.stats["misses"],
+        ])
+        hit_rate = (
+            (self.stats["tier1_hits"] + self.stats["tier2_hits"] + self.stats["tier3_hits"])
+            / max(total_lookups, 1)
+        )
+        return {
+            **self.stats,
+            "total_lookups": total_lookups,
+            "hit_rate_pct": hit_rate * 100.0,
+            "active_tier1_blocks": len(self.tier1_lru),
+            "active_tier2_blocks": len(self.tier2_lru),
+            "active_tier3_blocks": len(self.tier3_lru),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Storage Offload Worker for 3-Tier Hierarchy (Phase 2)
+# ---------------------------------------------------------------------------
 
 class SpyreNixlStorageWorker(_SpyreRegisterKVCachesMixin, OffloadingConnectorWorker):
-    """Spyre-aware storage offload worker for 3-tier memory hierarchy.
-
-    Coordinates two-stage DMA transfers:
-      1. Stage 1 (AIU <-> Host DRAM): SpyrePagedKVCache <-> Pinned Staging Buffers
-      2. Stage 2 (Host DRAM <-> NVMe): Pinned Staging Buffers <-> Local NVMe Filesystem
-    """
+    """Spyre Storage Worker orchestrating 3-tier DMA offloading & prefix cache hits."""
 
     def __init__(
         self,
@@ -387,9 +535,10 @@ class SpyreNixlStorageWorker(_SpyreRegisterKVCachesMixin, OffloadingConnectorWor
     ) -> None:
         super().__init__(spec, vllm_config, kv_cache_config)
         self.storage_engine = SpyreNVMeStorageEngine()
+        self.cache_manager = Spyre3TierCacheManager(storage_engine=self.storage_engine)
         self._pending_store_jobs: list[Any] = []
         self._pending_load_jobs: dict[str, Any] = {}
-        logger.info("%s SpyreNixlStorageWorker initialized successfully", _DIAG)
+        logger.info("%s SpyreNixlStorageWorker initialized with 3-tier cache manager", _DIAG)
 
     def prepare_store_kv(self, metadata: Any) -> None:
         store_jobs = getattr(metadata, "store_jobs", {})
@@ -397,11 +546,13 @@ class SpyreNixlStorageWorker(_SpyreRegisterKVCachesMixin, OffloadingConnectorWor
             self._pending_store_jobs.append((job_id, entry))
 
     def start_kv_transfers(self, metadata: Any) -> None:
-        # 1. Process store jobs: AIU -> Host DRAM -> NVMe SSD
+        layer_names = list(getattr(self, "device_kv_caches", {}).keys())
+
+        # 1. Process store jobs (Tier 1 AIU -> Tier 2 Host DRAM -> Tier 3 NVMe)
         for job_id, entry in self._pending_store_jobs:
             src_block_ids = getattr(entry.src_spec, "block_ids", [])
             if hasattr(self, "copy_blocks") and hasattr(self, "device_kv_caches"):
-                # Stage 1: D2H copy from Spyre AIU device DRAM to pinned host staging
+                # D2H DMA copy
                 self.copy_blocks(
                     self.device_kv_caches,
                     self.host_xfer_buffers,
@@ -410,58 +561,41 @@ class SpyreNixlStorageWorker(_SpyreRegisterKVCachesMixin, OffloadingConnectorWor
                     direction="d2h",
                 )
 
-            # Stage 2: Asynchronous write from host staging to NVMe storage
+            # Packed write to NVMe
             t0 = time.perf_counter()
             total_bytes = 0
-            for ln in getattr(self, "device_kv_caches", {}):
-                k_t = self.host_xfer_buffers.get(ln + "_k")
-                v_t = self.host_xfer_buffers.get(ln + "_v")
-                if k_t is not None and v_t is not None:
-                    for b_id in src_block_ids:
-                        k_file = os.path.join(self.storage_engine.root_dir, f"{ln}_k_{b_id}.bin")
-                        v_file = os.path.join(self.storage_engine.root_dir, f"{ln}_v_{b_id}.bin")
-                        total_bytes += self.storage_engine.write_block_direct(
-                            k_file, bytes(k_t[b_id].untyped_storage())
-                        )
-                        total_bytes += self.storage_engine.write_block_direct(
-                            v_file, bytes(v_t[b_id].untyped_storage())
-                        )
-            dt = time.perf_counter() - t0
+            for b_id in src_block_ids:
+                fpath, written, dt = self.storage_engine.pack_and_write_block(
+                    b_id, layer_names, self.host_xfer_buffers
+                )
+                total_bytes += written
+
+            elapsed = time.perf_counter() - t0
+            self.cache_manager.stats["total_bytes_offloaded"] += total_bytes
             logger.debug(
-                "%s Store job %s completed: %d bytes written in %.3fs (%.2f MB/s)",
-                _DIAG, job_id, total_bytes, dt,
-                (total_bytes / (1024 * 1024)) / max(dt, 1e-6),
+                "%s Offloaded %d blocks (%d bytes) in %.3fs (%.2f MB/s)",
+                _DIAG, len(src_block_ids), total_bytes, elapsed,
+                (total_bytes / (1024 * 1024)) / max(elapsed, 1e-6),
             )
             if hasattr(self, "_connector_worker_meta"):
                 self._connector_worker_meta.mark_completed(job_id)
         self._pending_store_jobs.clear()
 
-        # 2. Process load jobs: NVMe SSD -> Host DRAM -> AIU
+        # 2. Process load jobs (Tier 3 NVMe -> Tier 2 Host DRAM -> Tier 1 AIU)
         load_jobs = getattr(metadata, "load_jobs", {})
         for job_id, entry in load_jobs.items():
             dst_block_ids = getattr(entry.dst_spec, "block_ids", [])
             t0 = time.perf_counter()
             total_bytes = 0
-            # Stage 1: Read from NVMe storage into host staging buffers
-            for ln in getattr(self, "device_kv_caches", {}):
-                k_t = self.host_xfer_buffers.get(ln + "_k")
-                v_t = self.host_xfer_buffers.get(ln + "_v")
-                if k_t is not None and v_t is not None:
-                    for b_id in dst_block_ids:
-                        k_file = os.path.join(self.storage_engine.root_dir, f"{ln}_k_{b_id}.bin")
-                        v_file = os.path.join(self.storage_engine.root_dir, f"{ln}_v_{b_id}.bin")
-                        if os.path.exists(k_file) and os.path.exists(v_file):
-                            k_data = self.storage_engine.read_block_direct(k_file)
-                            v_data = self.storage_engine.read_block_direct(v_file)
-                            k_t[b_id].copy_(
-                                torch.frombuffer(k_data, dtype=k_t.dtype).reshape(k_t[b_id].shape)
-                            )
-                            v_t[b_id].copy_(
-                                torch.frombuffer(v_data, dtype=v_t.dtype).reshape(v_t[b_id].shape)
-                            )
-                            total_bytes += len(k_data) + len(v_data)
+            for b_id in dst_block_ids:
+                fpath = os.path.join(self.storage_engine.root_dir, f"block_{b_id:06d}.bin")
+                if os.path.exists(fpath):
+                    read_bytes, dt = self.storage_engine.read_and_unpack_block(
+                        fpath, b_id, layer_names, self.host_xfer_buffers
+                    )
+                    total_bytes += read_bytes
 
-            # Stage 2: H2D copy from host staging buffers to Spyre AIU device memory
+            # H2D DMA copy
             if hasattr(self, "copy_blocks") and hasattr(self, "device_kv_caches"):
                 self.copy_blocks(
                     self.host_xfer_buffers,
@@ -470,28 +604,24 @@ class SpyreNixlStorageWorker(_SpyreRegisterKVCachesMixin, OffloadingConnectorWor
                     dst_block_ids,
                     direction="h2d",
                 )
-            dt = time.perf_counter() - t0
+
+            elapsed = time.perf_counter() - t0
+            self.cache_manager.stats["total_bytes_restored"] += total_bytes
             logger.debug(
-                "%s Load job %s completed: %d bytes restored in %.3fs (%.2f MB/s)",
-                _DIAG, job_id, total_bytes, dt,
-                (total_bytes / (1024 * 1024)) / max(dt, 1e-6),
+                "%s Restored %d blocks (%d bytes) in %.3fs (%.2f MB/s)",
+                _DIAG, len(dst_block_ids), total_bytes, elapsed,
+                (total_bytes / (1024 * 1024)) / max(elapsed, 1e-6),
             )
             if hasattr(self, "_connector_worker_meta"):
                 self._connector_worker_meta.mark_completed(job_id)
 
 
 # ---------------------------------------------------------------------------
-# Connector facades — override __init__ to substitute the Spyre worker
+# Connector facades
 # ---------------------------------------------------------------------------
 
 class SpyreNixlConnector(NixlPullConnector):
-    """Pull-based Spyre NIXL connector (kv_producer / kv_consumer).
-
-    Identical to :class:`NixlPullConnector` except the worker-side object is
-    a :class:`SpyreNixlPullConnectorWorker` instead of
-    ``NixlPullConnectorWorker``, so ``register_kv_caches()`` handles
-    ``SpyrePagedKVCache`` correctly.
-    """
+    """Pull-based Spyre NIXL connector."""
 
     def __init__(
         self,
@@ -500,28 +630,15 @@ class SpyreNixlConnector(NixlPullConnector):
         kv_cache_config: "KVCacheConfig",
     ) -> None:
         super().__init__(vllm_config, role, kv_cache_config)
-        # Replace the plain NixlPullConnectorWorker with the Spyre-aware one.
-        # The parent __init__ already ran the expensive NIXL agent setup; we
-        # just replace the worker object with the same args to get Spyre's
-        # register_kv_caches() without re-running setup.
         if role == KVConnectorRole.WORKER:
             assert self.connector_worker is not None
             assert isinstance(self.connector_worker, NixlPullConnectorWorker)
-            # Preserve all state by swapping the class — SpyreNixlPullConnectorWorker
-            # IS-A NixlPullConnectorWorker so isinstance() checks still pass.
             self.connector_worker.__class__ = SpyreNixlPullConnectorWorker
-            logger.info(
-                "%s SpyreNixlConnector: worker upgraded to SpyreNixlPullConnectorWorker",
-                _DIAG,
-            )
+            logger.info("%s Upgraded worker to SpyreNixlPullConnectorWorker", _DIAG)
 
 
 class SpyreNixlPushConnector(NixlPushConnector):
-    """Push-based Spyre NIXL connector.
-
-    Identical to :class:`NixlPushConnector` except the worker uses
-    :class:`SpyreNixlPushConnectorWorker`.
-    """
+    """Push-based Spyre NIXL connector."""
 
     def __init__(
         self,
@@ -534,10 +651,7 @@ class SpyreNixlPushConnector(NixlPushConnector):
             assert self.connector_worker is not None
             assert isinstance(self.connector_worker, NixlPushConnectorWorker)
             self.connector_worker.__class__ = SpyreNixlPushConnectorWorker
-            logger.info(
-                "%s SpyreNixlPushConnector: worker upgraded to SpyreNixlPushConnectorWorker",
-                _DIAG,
-            )
+            logger.info("%s Upgraded worker to SpyreNixlPushConnectorWorker", _DIAG)
 
 
 class SpyreOffloadingConnector(OffloadingConnector):
@@ -553,10 +667,7 @@ class SpyreOffloadingConnector(OffloadingConnector):
         if role == KVConnectorRole.WORKER:
             assert self.connector_worker is not None
             self.connector_worker.__class__ = SpyreNixlStorageWorker
-            logger.info(
-                "%s SpyreOffloadingConnector: worker upgraded to SpyreNixlStorageWorker",
-                _DIAG,
-            )
+            logger.info("%s Upgraded worker to SpyreNixlStorageWorker", _DIAG)
 
 
 # ---------------------------------------------------------------------------
@@ -564,12 +675,7 @@ class SpyreOffloadingConnector(OffloadingConnector):
 # ---------------------------------------------------------------------------
 
 def register_spyre_nixl_connectors() -> None:
-    """Register Spyre connectors with vLLM.
-
-    Call this once from ``spyre_inference.__init__.register()`` so that
-    ``--kv-connector SpyreNixlConnector`` or ``--kv-connector SpyreOffloadingConnector``
-    is accepted without ``--kv-connector-module-path``.
-    """
+    """Register Spyre connectors with vLLM's KVConnectorFactory."""
     _MODULE = "spyre_inference.distributed.kv_transfer.kv_connector.v1.nixl.spyre_connector"
     for name, cls_name in (
         ("SpyreNixlConnector", "SpyreNixlConnector"),
@@ -580,5 +686,4 @@ def register_spyre_nixl_connectors() -> None:
             KVConnectorFactory.register_connector(name, _MODULE, cls_name)
             logger.debug("%s Registered %s in KVConnectorFactory.", _DIAG, name)
         except ValueError:
-            # Already registered — harmless on re-import.
             logger.debug("%s %s already registered, skipping.", _DIAG, name)
