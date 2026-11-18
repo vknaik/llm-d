@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Heterogeneous Hybrid Prefill-Decode Disaggregation Setup Guide</title>
+  <title>Heterogeneous Hybrid Disaggregated Prefill-Decode (PD) Setup and Deployment Guide</title>
   <style>
     html {
       color: #1a1a1a;
@@ -415,8 +415,8 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Heterogeneous Hybrid Prefill-Decode Disaggregation
-Setup Guide</h1>
+<h1 class="title">Heterogeneous Hybrid Disaggregated Prefill-Decode (PD)
+Setup and Deployment Guide</h1>
 </header>
 <h1
 id="heterogeneous-hybrid-disaggregated-prefill-decode-pd-setup-and-deployment-guide">Heterogeneous
@@ -1514,6 +1514,9 @@ identified and systematically resolved:</p>
 +------------------------------------+------------------------------------+-------------------------------+
 | 5. Hardware RAS Bus Fence Fault    | Faulty Spyre card (0000:41:00.0)   | Deployed dedicated blocker    |
 |    (BusFence 0xa35e on warmup)     | on worker node p1-worker-63        | pod holding faulty card PCI   |
++------------------------------------+------------------------------------+-------------------------------+
+| 6. Startup Probe Timeout (Prefill) | Multi-replica compilation exceeds  | Extended probe threshold to   |
+|    (Exit 137 at 30 min threshold)  | 30 min limit on p1-worker-63       | 60 min, dshm to 64Gi, default |
 +------------------------------------+------------------------------------+-------------------------------+</code></pre>
 <hr />
 <h3
@@ -1667,5 +1670,45 @@ and deployed a dedicated blocker pod
 pods allocate only healthy cards (<code>0000:2f:00.0</code>,
 <code>0000:30:00.0</code>, <code>0000:3f:00.0</code>,
 <code>0000:40:00.0</code>).</p>
+<hr />
+<h3
+id="challenge-6-kubelet-startup-probe-timeout-during-multi-replica-attention-graph-compilation">8.6
+Challenge 6: Kubelet Startup Probe Timeout during Multi-Replica
+Attention Graph Compilation</h3>
+<h4 id="phenomenon-5">Phenomenon:</h4>
+<p>When scaling the hybrid prefill deployment
+<code>pd-disaggregation-hybrid-spyre-aiu-vllm-prefill</code> to 4
+replicas on node <code>p1-worker-63</code>, all 4 pods cycled in an
+endless restart loop (<code>Exit Code: 137</code>, <span
+class="math inline">\approx 98\text{ restarts over }2\text{
+days}</span>). Kubelet events logged:</p>
+<pre class="text"><code>Normal   Killing    7m38s (x98 over 2d1h)  kubelet  Container modelserver failed startup probe, will be restarted
+Warning  Unhealthy  8s (x11787 over 2d2h)  kubelet  Startup probe failed: Get &quot;http://10.130.2.119:8000/health&quot;: dial tcp 10.130.2.119:8000: connect: connection refused</code></pre>
+<h4 id="root-cause-3">Root Cause:</h4>
+<p>During pod initialization, each Spyre prefill worker records 56
+attention graph variants across 40 transformer layers (<span
+class="math inline">2,240\text{ subgraphs}</span>). Under multi-tenant
+CPU load with 4 concurrent replicas on <code>p1-worker-63</code>, this
+compilation phase required <span class="math inline">31\text{ to
+}35\text{ minutes}</span>. Because <code>startupProbe</code> was
+configured with <code>periodSeconds: 15, failureThreshold: 120</code>
+(<span class="math inline">1,800\text{ seconds} = 30\text{
+minutes}</span>), kubelet killed the containers at minute 30.0 just as
+they were recording layers 35–40, resetting the compilation from layer
+0.</p>
+<h4 id="fix-applied-5">Fix Applied:</h4>
+<ol type="1">
+<li>Extended <code>startupProbe</code> in <a
+href="/home/vkn/llm-d/llm-d/guides/pd-disaggregation/hybrid/spyre-prefill.yaml:182"><code>spyre-prefill.yaml</code></a>
+to <code>initialDelaySeconds: 30</code>, <code>periodSeconds: 30</code>,
+<code>failureThreshold: 120</code> (<span
+class="math inline">3,600\text{ seconds} = 60\text{ minutes}</span> of
+initialization headroom).</li>
+<li>Updated <code>schedulerName</code> to
+<code>default-scheduler</code>.</li>
+<li>Increased <code>/dev/shm</code> <code>dshm</code> volume from
+<code>20Gi</code> to <code>64Gi</code> to eliminate shared memory
+broadcast blocks during concurrent warmup.</li>
+</ol>
 </body>
 </html>

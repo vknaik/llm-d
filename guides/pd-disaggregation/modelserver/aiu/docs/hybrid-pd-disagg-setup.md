@@ -471,6 +471,9 @@ During the initial deployment and end-to-end integration of the hybrid PD system
 | 5. Hardware RAS Bus Fence Fault    | Faulty Spyre card (0000:41:00.0)   | Deployed dedicated blocker    |
 |    (BusFence 0xa35e on warmup)     | on worker node p1-worker-63        | pod holding faulty card PCI   |
 +------------------------------------+------------------------------------+-------------------------------+
+| 6. Startup Probe Timeout (Prefill) | Multi-replica compilation exceeds  | Extended probe threshold to   |
+|    (Exit 137 at 30 min threshold)  | 30 min limit on p1-worker-63       | 60 min, dshm to 64Gi, default |
++------------------------------------+------------------------------------+-------------------------------+
 ```
 
 ---
@@ -594,3 +597,22 @@ Inference workloads scheduled on card `0000:41:00.0` on node `p1-worker-63` cons
 
 #### Fix Applied:
 Identified faulty card by cross-correlating `spyre-metrics-exporter` telemetry with device-plugin logs, and deployed a dedicated blocker pod `block-faulty-card-0000-41-00-0` holding resource `ibm.com/spyre_pf_0000_41_00.0: 1`, ensuring all inference pods allocate only healthy cards (`0000:2f:00.0`, `0000:30:00.0`, `0000:3f:00.0`, `0000:40:00.0`).
+
+---
+
+### 8.6 Challenge 6: Kubelet Startup Probe Timeout during Multi-Replica Attention Graph Compilation
+
+#### Phenomenon:
+When scaling the hybrid prefill deployment `pd-disaggregation-hybrid-spyre-aiu-vllm-prefill` to 4 replicas on node `p1-worker-63`, all 4 pods cycled in an endless restart loop (`Exit Code: 137`, $\approx 98\text{ restarts over }2\text{ days}$). Kubelet events logged:
+```text
+Normal   Killing    7m38s (x98 over 2d1h)  kubelet  Container modelserver failed startup probe, will be restarted
+Warning  Unhealthy  8s (x11787 over 2d2h)  kubelet  Startup probe failed: Get "http://10.130.2.119:8000/health": dial tcp 10.130.2.119:8000: connect: connection refused
+```
+
+#### Root Cause:
+During pod initialization, each Spyre prefill worker records 56 attention graph variants across 40 transformer layers ($2,240\text{ subgraphs}$). Under multi-tenant CPU load with 4 concurrent replicas on `p1-worker-63`, this compilation phase required $31\text{ to }35\text{ minutes}$. Because `startupProbe` was configured with `periodSeconds: 15, failureThreshold: 120` ($1,800\text{ seconds} = 30\text{ minutes}$), kubelet killed the containers at minute 30.0 just as they were recording layers 35–40, resetting the compilation from layer 0.
+
+#### Fix Applied:
+1. Extended `startupProbe` in [`spyre-prefill.yaml`](/home/vkn/llm-d/llm-d/guides/pd-disaggregation/hybrid/spyre-prefill.yaml:182) to `initialDelaySeconds: 30`, `periodSeconds: 30`, `failureThreshold: 120` ($3,600\text{ seconds} = 60\text{ minutes}$ of initialization headroom).
+2. Updated `schedulerName` to `default-scheduler`.
+3. Increased `/dev/shm` `dshm` volume from `20Gi` to `64Gi` to eliminate shared memory broadcast blocks during concurrent warmup.

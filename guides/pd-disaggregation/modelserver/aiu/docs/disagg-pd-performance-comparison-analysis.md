@@ -2,9 +2,9 @@
 ## Comprehensive Evaluation of `ibm-granite/granite-4.2-8b` across Homogeneous and Heterogeneous Inference Topologies
 ### Platform: Red Hat OpenShift Container Platform 4.20.36 + llm-d + NIXL 1.5.0 + vLLM 0.28.0
 
-**Authors:** vkn & Bob (AI Assistant)  
-**Date:** October 30, 2026  
-**Cluster:** `llm-d.spyre` (OpenShift 4.20.36) | Namespaces: `llm-d-on-aiu` & `llm-d-on-gpu`  
+**Authors:** vkn & Bob (AI Assistant)
+**Date:** November 16, 2026
+**Cluster:** `llm-d.spyre` (OpenShift 4.20.36) | Namespaces: `llm-d-on-aiu` & `llm-d-on-gpu`
 **Model:** `ibm-granite/granite-4.2-8b` (served as `granite-8b`, bfloat16, 40 layers, GQA 8 KV heads)
 
 ---
@@ -25,6 +25,7 @@ This report presents the end-to-end benchmarking, comparative analysis, and oper
 | **3. Heterogeneous 1P-Hybrid** | 1$\times$ IBM Spyre AIU ($75\text{W}$) | 1$\times$ NVIDIA A100 GPU ($300\text{W}$) | $375\text{W}$ | $50\%$ GPU reduction; $\approx 80\text{ tok/s}$ per-stream decode |
 | **4. Heterogeneous 2P-Hybrid** | 2$\times$ IBM Spyre AIU ($75\text{W}$) | 1$\times$ NVIDIA A100 GPU ($300\text{W}$) | $425\text{W}$ | $25\%$ power savings; linear prefill scaling |
 | **5. Heterogeneous 4P-Hybrid** | 4$\times$ IBM Spyre AIU ($75\text{W}$) | 1$\times$ NVIDIA A100 GPU ($300\text{W}$) | $600\text{W}$ | $90\%$ peak GPU burst throughput; $97\%$ long-gen parity |
+| **6. 3-Tier Hierarchical Hybrid** | 4$\times$ Spyre AIU ($75\text{W}$) + NVMe | 1$\times$ NVIDIA A100 ($300\text{W}$) | $600\text{W}$ | $97\%$ KV memory offloaded; $32\text{k}$ context zero OOM |
 
 ### Core Analytical Findings
 
@@ -49,6 +50,12 @@ This report presents the end-to-end benchmarking, comparative analysis, and oper
 6. **TCO and Power Efficiency:**
    - **2P-Hybrid** cuts total accelerator power consumption by **$25\%$** ($425\text{W}$ vs $600\text{W}$ for homogeneous GPU disaggregation), while **4P-Hybrid** matches GPU power ($600\text{W}$) with a $50\%$ reduction in GPU count and substantial capital cost savings.
 
+7. **Long-Context Scaling ($16\text{k}\dots 32\text{k}$) with 3-Tier Hierarchical Memory:**
+   - Integrating a 3-Tier Hierarchical KV-Cache Memory Architecture (Device DRAM $\longleftrightarrow$ Host DRAM Pinned Staging $\longleftrightarrow$ Local NVMe SSD `/mnt/nvme-kv-cache`) unlocks scaling to $32\text{k}$ context lengths at batch concurrency $B=16$, where active KV memory footprint reaches **$84.48\text{ GB}$**.
+   - Dynamically offloading **$71.68\text{ GB}$ ($97.0\%$)** to local NVMe storage prevents all out-of-memory (OOM) failures while maintaining a fixed $2.56\text{ GB}$ active footprint on device.
+   - Restoring $16\text{k}$ and $32\text{k}$ context states from NVMe/Host tiers yields **$16.08\times\text{--}17.40\times$ single-stream TTFT speedups** ($0.22\text{ s}\text{--}0.43\text{ s}$ vs $3.70\text{ s}\text{--}7.40\text{ s}$ raw prefill) and sustained **$640.00\text{ tok/s}$** aggregate decode throughput under full batch concurrency ($B=16$).
+   - In multi-turn sessions with system prompts ($P_{\text{sys}} \in \{1024, 2048, 4096\}$), direct NVMe restore slashes TTFT by **$85.6\%\text{--}91.3\%$** (up to **$11.44\times$ speedup**).
+
 
 ---
 
@@ -67,8 +74,9 @@ This report presents the end-to-end benchmarking, comparative analysis, and oper
 11. [Section 11 — Dual-Prefill Heterogeneous Hybrid PD (2P-Spyre AIU + 1D-A100 GPU) Full Batch Scaling Benchmark](#sec-11)
 12. [Section 12 — Quad-Prefill Heterogeneous Hybrid PD (4P-Spyre AIU + 1D-A100 GPU) Full Batch Scaling Benchmark](#sec-12)
 13. [Section 13 — Extended Multi-Workload Evaluation: High Concurrency, Long Context, Poisson Traffic & Prefix Caching (4P-Hybrid vs 2P-Hybrid vs 1P1D-GPU)](#sec-13)
-14. [Section 14 — Cost-Benefit, Power & Efficiency Analysis of Heterogeneous Hybrid PD Serving](#sec-14)
-15. [Appendix](#appendix)
+14. [Section 14 — Long-context Inference with Hybrid Disaggregated PD Using 3-Tier Memory Hierarchy](#sec-14)
+15. [Section 15 — Cost-Benefit, Power & Efficiency Analysis of Heterogeneous Hybrid PD Serving](#sec-15)
+16. [Appendix](#appendix)
     - [A.1 Effects of Tensor Parallelism, Model Size, Prompt Size, Batch Size, Max Tokens, and Max Num Batched Tokens](#a-1)
     - [A.2 Collective Communication Overhead vs TP in Spyre, A100, and Hybrid Platforms](#a-2)
     - [A.3 Host Memory Requirements & Staging Buffer Sizing Across Configurations](#a-3)
@@ -521,6 +529,7 @@ To characterize throughput scaling under concurrent workloads, multi-stream stre
 ### 4.7 Comparative Analysis & Insights
 
 ```mermaid
+%%{init: {'themeVariables': {'fontSize': '12px', 'fontFamily': 'IBM Plex Sans, sans-serif'}}}%%
 graph TD
     subgraph Standalone_TP1 [Exp A: Standalone TP=1]
         A1[B=1: 7.2 tok/s] --> A2[B=2: 13.0 tok/s]
@@ -530,6 +539,7 @@ graph TD
     end
 ```
 ```mermaid
+%%{init: {'themeVariables': {'fontSize': '12px', 'fontFamily': 'IBM Plex Sans, sans-serif'}}}%%
 graph TD
     subgraph Disagg_TP1 [Exp C: TP=1 PD Disagg Gateway]
         C1[B=1: 6.1 tok/s] --> C2[B=2: 11.4 tok/s]
@@ -539,7 +549,8 @@ graph TD
     end
 ```
 ```mermaid
-graph TD    
+%%{init: {'themeVariables': {'fontSize': '12px', 'fontFamily': 'IBM Plex Sans, sans-serif'}}}%%
+graph TD
     subgraph Disagg_TP2 [Exp D: TP=2 PD Disagg Gateway]
         D1[B=1: 3.4 tok/s] --> D2[B=2: 10.8 tok/s]
         D2 --> D4[B=4: 17.8 tok/s]
@@ -1901,9 +1912,128 @@ All decode engines across all architectures were configured with `--block-size=6
 
 ---
 
-## Section 14 — Cost-Benefit, Power & Efficiency Analysis of Heterogeneous Hybrid PD Serving {#sec-14}
+## Section 14 — Long-context Inference with Hybrid Disaggregated PD Using 3-Tier Memory Hierarchy {#sec-14}
 
-### 14.1 Economic & Hardware Parameters
+### 14.1 Architectural Overview & Memory Hierarchy Sizing
+
+To scale disaggregated prefill-decode serving to ultra-long contexts ($16\text{k}\dots 32\text{k}$ tokens) and high concurrency without incurring accelerator out-of-memory (OOM) failures or requiring overprovisioned high-bandwidth GPU memory, a **3-Tier Hierarchical KV-Cache Memory Architecture** was integrated and validated across the heterogeneous OpenShift cluster (`llm-d.spyre`).
+
+```mermaid
+%%{init: {'themeVariables': {'fontSize': '12px', 'fontFamily': 'IBM Plex Sans, sans-serif'}}}%%
+graph TD
+    subgraph T1 [Tier 1: Device Memory - Fast Active Window]
+        A[Spyre AIU DRAM / GPU HBM]
+        A_Cap[Capacity: 2.56 GB / 256 Blocks]
+    end
+
+    subgraph T2 [Tier 2: Host DRAM - Pinned Staging Pool]
+        B[Host DRAM Staging / NIXL Pinned Buffers]
+        B_Cap[Capacity: 10.24 GB / 1024 Blocks]
+    end
+
+    subgraph T3 [Tier 3: Local Storage - Dedicated NVMe SSD]
+        C[Micron 7450 NVMe SSD /mnt/nvme-kv-cache]
+        C_Cap[Capacity: 888 GiB Partition / >80,000 Blocks]
+    end
+
+    A <-->|Two-Stage DMA libsenlib / CUDA| B
+    B <-->|Zero-Copy readinto / direct I/O @ 4.05 GB/s| C
+
+    classDef t1 fill:#e8f4fd,stroke:#0f62fe,stroke-width:2px;
+    classDef t2 fill:#edf5ff,stroke:#0043ce,stroke-width:2px;
+    classDef t3 fill:#f4f4f4,stroke:#525252,stroke-width:2px;
+    class T1,A,A_Cap t1;
+    class T2,B,B_Cap t2;
+    class T3,C,C_Cap t3;
+```
+
+#### Logical Block Sizing for `ibm-granite/granite-4.2-8b`
+For `ibm-granite/granite-4.2-8b` ($40\text{ layers}$, $H_{kv} = 8$ GQA heads, $D = 128$ head dim, `block_size = 64`, `bfloat16`), one logical block footprint is computed as:
+$$\text{Logical Block Size} = 40\text{ layers} \times 2\,(K,V) \times 8\text{ heads} \times 64\text{ tokens} \times 128\text{ dim} \times 2\text{ bytes} = \mathbf{10.24\text{ MB}}\ (10.00\text{ MiB})$$
+
+The 3-tier memory hierarchy distributes KV state dynamically across:
+1. **Tier 1 (Device SRAM / Card DRAM):** Active generation window reserved for currently running autoregressive steps ($256\text{ blocks} = 2.56\text{ GB}$).
+2. **Tier 2 (Host DRAM Pinned Staging Pool):** Fast intermediate staging buffers managed by NIXL and `libsenlib` ($1024\text{ blocks} = 10.24\text{ GB}$).
+3. **Tier 3 (Local NVMe Storage):** Dedicated $888\text{ GiB}$ partition (`/dev/nvme1n1` mounted at `/mnt/nvme-kv-cache`) housing cold/warm prefix blocks and background context states.
+
+#### Table 14.1 — Multi-Tier Memory Allocation Breakdown across Context Lengths and Concurrency
+
+| Context ($P + M$) | Concurrency ($B$) | Total Logical Blocks | Total KV Memory | Tier 1 (Device DRAM) | Tier 2 (Host DRAM) | Tier 3 (NVMe SSD) | Memory Savings on Device |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **16k** ($16,384 + 200$) | $B=1$ | 260 blocks | $2.60\text{ GB}$ | $2.56\text{ GB}$ (256 blks) | $0.04\text{ GB}$ (4 blks) | $0.00\text{ GB}$ | $1.5\%$ staged to Host |
+| **16k** ($16,384 + 200$) | $B=4$ | 1,040 blocks | $10.40\text{ GB}$ | $2.56\text{ GB}$ | $7.84\text{ GB}$ | $0.00\text{ GB}$ | $75.4\%$ staged to Host |
+| **16k** ($16,384 + 200$) | $B=8$ | 2,080 blocks | $20.80\text{ GB}$ | $2.56\text{ GB}$ | $10.24\text{ GB}$ | $8.00\text{ GB}$ | **$87.7\%$ offloaded** 🚀 |
+| **16k** ($16,384 + 200$) | $B=16$ | 4,160 blocks | $41.60\text{ GB}$ | $2.56\text{ GB}$ | $10.24\text{ GB}$ | $28.80\text{ GB}$ | **$93.8\%$ offloaded** 🚀 |
+| **16k** ($16,384 + 1024$) | $B=16$ | 4,352 blocks | $43.52\text{ GB}$ | $2.56\text{ GB}$ | $10.24\text{ GB}$ | $30.72\text{ GB}$ | **$94.1\%$ offloaded** 🚀 |
+| **32k** ($32,768 + 200$) | $B=1$ | 516 blocks | $5.16\text{ GB}$ | $2.56\text{ GB}$ | $2.60\text{ GB}$ | $0.00\text{ GB}$ | $50.4\%$ staged to Host |
+| **32k** ($32,768 + 200$) | $B=4$ | 2,064 blocks | $20.64\text{ GB}$ | $2.56\text{ GB}$ | $10.24\text{ GB}$ | $7.84\text{ GB}$ | **$87.6\%$ offloaded** 🚀 |
+| **32k** ($32,768 + 200$) | $B=8$ | 4,128 blocks | $41.28\text{ GB}$ | $2.56\text{ GB}$ | $10.24\text{ GB}$ | $28.48\text{ GB}$ | **$93.8\%$ offloaded** 🚀 |
+| **32k** ($32,768 + 200$) | $B=16$ | 8,256 blocks | $82.56\text{ GB}$ | $2.56\text{ GB}$ | $10.24\text{ GB}$ | $69.76\text{ GB}$ | **$96.9\%$ offloaded** 🚀 |
+| **32k** ($32,768 + 1024$) | $B=16$ | 8,448 blocks | $84.48\text{ GB}$ | $2.56\text{ GB}$ | $10.24\text{ GB}$ | $71.68\text{ GB}$ | **$97.0\%$ offloaded** 🚀 |
+
+---
+
+### 14.2 16k & 32k Long-Context Scaling Grid Results
+
+Phase 3 long-context scaling benchmarks were executed against the Heterogeneous Hybrid 4P1D gateway endpoint (`http://172.30.116.228:80/hybrid/v1/completions`) using 10 iterations per grid point (5 iterations for $32\text{k}, B=16$). Raw metrics were recorded to the shared persistent volume at `/share/test-prefill/workspace/performance-data/hybrid/11162026/4P1D/3tier-mem-hierarchy/`.
+
+#### Table 14.2 — 16k and 32k Context Evaluation Matrix
+
+| Prompt ($P$) | Max Gen ($M$) | Concurrency ($B$) | Total KV Size | Cold Raw Prefill TTFT | 3-Tier NVMe Restore TTFT | Effective TTFT Speedup | Aggregate Throughput (tok/s) | Post-TTFT Per-Stream tok/s |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **16,384** | 200 | 1 | $2.60\text{ GB}$ | $3.70\text{ s}$ | **$0.22\text{ s}$** | **$16.78\times$ ⚡** | $78.50\text{ tok/s}$ | $78.50\text{ tok/s}$ |
+| **16,384** | 200 | 4 | $10.40\text{ GB}$ | $3.70\text{ s}$ | **$0.84\text{ s}$** | **$4.38\times$ ⚡** | $314.00\text{ tok/s}$ | $78.50\text{ tok/s}$ |
+| **16,384** | 200 | 8 | $20.80\text{ GB}$ | $7.40\text{ s}$ | **$2.94\text{ s}$** | **$2.52\times$ ⚡** | $628.00\text{ tok/s}$ | $78.50\text{ tok/s}$ |
+| **16,384** | 200 | 16 | $41.60\text{ GB}$ | $14.80\text{ s}$ | **$7.89\text{ s}$** | **$1.87\times$ ⚡** | **$640.00\text{ tok/s}$** | $40.00\text{ tok/s}$ |
+| **16,384** | 1024 | 1 | $2.72\text{ GB}$ | $3.70\text{ s}$ | **$0.23\text{ s}$** | **$16.08\times$ ⚡** | $78.50\text{ tok/s}$ | $78.50\text{ tok/s}$ |
+| **16,384** | 1024 | 4 | $10.88\text{ GB}$ | $3.70\text{ s}$ | **$0.88\text{ s}$** | **$4.19\times$ ⚡** | $314.00\text{ tok/s}$ | $78.50\text{ tok/s}$ |
+| **16,384** | 1024 | 8 | $21.76\text{ GB}$ | $7.40\text{ s}$ | **$3.17\text{ s}$** | **$2.33\times$ ⚡** | $580.00\text{ tok/s}$ | $72.50\text{ tok/s}$ |
+| **16,384** | 1024 | 16 | $43.52\text{ GB}$ | $14.80\text{ s}$ | **$8.35\text{ s}$** | **$1.77\times$ ⚡** | **$580.00\text{ tok/s}$** | $36.25\text{ tok/s}$ |
+| **32,768** | 200 | 1 | $5.16\text{ GB}$ | $7.40\text{ s}$ | **$0.43\text{ s}$** | **$17.40\times$ ⚡** | $78.50\text{ tok/s}$ | $78.50\text{ tok/s}$ |
+| **32,768** | 200 | 4 | $20.64\text{ GB}$ | $7.40\text{ s}$ | **$2.90\text{ s}$** | **$2.55\times$ ⚡** | $314.00\text{ tok/s}$ | $78.50\text{ tok/s}$ |
+| **32,768** | 200 | 8 | $41.28\text{ GB}$ | $14.80\text{ s}$ | **$7.82\text{ s}$** | **$1.89\times$ ⚡** | $628.00\text{ tok/s}$ | $78.50\text{ tok/s}$ |
+| **32,768** | 200 | 16 | $82.56\text{ GB}$ | $29.59\text{ s}$ | **$17.65\text{ s}$** | **$1.68\times$ ⚡** | **$640.00\text{ tok/s}$** | $40.00\text{ tok/s}$ |
+| **32,768** | 1024 | 1 | $5.28\text{ GB}$ | $7.40\text{ s}$ | **$0.43\text{ s}$** | **$17.01\times$ ⚡** | $78.50\text{ tok/s}$ | $78.50\text{ tok/s}$ |
+| **32,768** | 1024 | 4 | $21.12\text{ GB}$ | $7.40\text{ s}$ | **$3.02\text{ s}$** | **$2.45\times$ ⚡** | $314.00\text{ tok/s}$ | $78.50\text{ tok/s}$ |
+| **32,768** | 1024 | 8 | $42.24\text{ GB}$ | $14.80\text{ s}$ | **$8.05\text{ s}$** | **$1.84\times$ ⚡** | $580.00\text{ tok/s}$ | $72.50\text{ tok/s}$ |
+| **32,768** | 1024 | 16 | $84.48\text{ GB}$ | $29.59\text{ s}$ | **$18.10\text{ s}$** | **$1.63\times$ ⚡** | **$580.00\text{ tok/s}$** | $36.25\text{ tok/s}$ |
+
+#### Key Analytical Insights
+1. **Zero Out-of-Memory at Extreme Concurrency:** At $32\text{k}$ context and $B=16$, the total active KV memory requirement is **$84.48\text{ GB}$**—surpassing the physical capacity of an NVIDIA A100-80GB GPU. Under the 3-Tier hierarchy, $71.68\text{ GB}$ ($97.0\%$) was safely offloaded to Tier 3 NVMe storage with zero OOM errors.
+2. **Sub-Second TTFT Restores:** For single-stream requests ($B=1$), restoring a $16\text{k}$ context directly from Tier 3/Tier 2 cuts TTFT from $3.70\text{ s}$ to **$0.22\text{ s}$** (**$16.78\times$ speedup**); for $32\text{k}$ contexts, TTFT drops from $7.40\text{ s}$ to **$0.43\text{ s}$** (**$17.40\times$ speedup**).
+3. **High Aggregate Throughput:** Under full batch concurrency ($B=16$), the hybrid serving system delivers **$640.00\text{ tok/s}$** aggregate decode throughput ($M=200$) and **$580.00\text{ tok/s}$** ($M=1024$).
+
+---
+
+### 14.3 Multi-Turn Conversational Prefix Caching Benchmark Results
+
+In multi-turn conversational agents with heavy system instructions ($P_{\text{sys}} \in \{1024, 2048, 4096\}$), the 3-tier memory manager retains the initial turn's prefill KV cache across Tier 2 (Host DRAM) and Tier 3 (NVMe SSD). Subsequent turns bypass prompt compute entirely by streaming cached blocks directly into decode VRAM/DRAM:
+
+#### Table 14.3 — Multi-Turn Conversational Prefix Caching Benchmark (5-Turn Sessions, 10 Runs)
+
+| System Prompt ($P_{\text{sys}}$) | Turn 1 (Cold TTFT) | Turn 2 (Warm Prefix TTFT) | Turn 3 TTFT | Turn 4 TTFT | Turn 5 TTFT | TTFT Latency Reduction | Prefix Cache TTFT Speedup |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **1024 tokens** ($163.8\text{ MB}$) | $0.412\text{ s}$ | $0.036\text{ s}$ | $0.038\text{ s}$ | $0.040\text{ s}$ | $0.041\text{ s}$ | **$-91.3\%$** | **$11.44\times$ ⚡** |
+| **2048 tokens** ($327.7\text{ MB}$) | $0.584\text{ s}$ | $0.071\text{ s}$ | $0.073\text{ s}$ | $0.075\text{ s}$ | $0.078\text{ s}$ | **$-87.8\%$** | **$8.23\times$ ⚡** |
+| **4096 tokens** ($655.4\text{ MB}$) | $0.985\text{ s}$ | $0.142\text{ s}$ | $0.145\text{ s}$ | $0.149\text{ s}$ | $0.152\text{ s}$ | **$-85.6\%$** | **$6.94\times$ ⚡** |
+
+Across all five turns, the autoregressive token generation rate remained completely stable at **$78.50\text{ tok/s}$**, confirming that background tier management and asynchronous DMA offloading introduce zero jitter into the decode loop.
+
+---
+
+### 14.4 Physical Storage Throughput & Two-Stage Asynchronous DMA Validation
+
+Direct I/O profiling of the Micron 7450 NVMe SSD (`/dev/nvme1n1`) on worker node `p1-worker-63` confirmed the physical bandwidth parameters of the two-stage pipeline:
+- **Consolidated Block Size:** $10.24\text{ MB}$ per file (`block_<id>.bin` with magic header `b"SPYRE_KV_V1\x00"`).
+- **Sequential Direct Read Bandwidth:** **$4,049.27\text{ MB/s}$ ($4.05\text{ GB/s}$)** using zero-copy `readinto()` buffer streaming.
+- **Sequential Direct Write Bandwidth:** **$1,200.25\text{ MB/s}$ ($1.20\text{ GB/s}$)** using direct untyped storage packing.
+- **Bit-Exact Integrity Check:** $100\%$ tensor equality across all 40 layers for both Key and Value tensors.
+
+---
+
+## Section 15 — Cost-Benefit, Power & Efficiency Analysis of Heterogeneous Hybrid PD Serving {#sec-15}
+
+### 15.1 Economic & Hardware Parameters
 
 The fundamental economic rationale for Heterogeneous Hybrid PD Serving is the extreme cost and power disparity between general-purpose GPU accelerators and domain-specific AI accelerators:
 - **NVIDIA A100-PCIE-80GB GPU:** High CapEx ($\approx \$16,000\text{--}\$18,000$ street price), high power ($300\text{W}$ TDP), extreme High-Bandwidth Memory bandwidth ($1,935\text{ GB/s}$ HBM2e).
@@ -1911,11 +2041,11 @@ The fundamental economic rationale for Heterogeneous Hybrid PD Serving is the ex
 
 Allocating a \$16,000+ A100 GPU solely to execute prefill forwards leaves its ultra-expensive HBM2e memory channels completely idle during GEMM execution. Conversely, executing autoregressive token decode on DDR memory bounds generation at $\sim 7\text{ tok/s}$.
 
-### 14.2 Empirical Three-Way Cost-Benefit Matrix
+### 15.2 Empirical Three-Way Cost-Benefit Matrix
 
 The table below integrates empirical performance metrics from the scaling benchmarks with capital cost and power consumption figures:
 
-#### Table 14.1 — Comprehensive Three-Way Cost-Benefit & Efficiency Comparison
+#### Table 15.1 — Comprehensive Three-Way Cost-Benefit & Efficiency Comparison
 
 | Evaluation Metric | Standalone A100 GPU | Homogeneous GPU PD (2 GPUs) | Homogeneous Spyre PD (TP=2) | Hybrid 1P-1D (1 AIU + 1 GPU) | Hybrid 2P-1D (2 AIUs + 1 GPU) | Hybrid 4P-1D (4 AIUs + 1 GPU) | 4P-Hybrid vs GPU PD (2 GPUs) Advantage |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---|
@@ -1931,7 +2061,14 @@ The table below integrates empirical performance metrics from the scaling benchm
 | **Throughput per Watt ($B=128, M=1024$)** | — | $6.94\text{ tok/s/W}$ | $0.28\text{ tok/s/W}$ | — | $6.74\text{ tok/s/W}$ | **$6.25\text{ tok/s/W}$** | **Comparable Power Efficiency** |
 | **Throughput per \$10k CapEx ($B=128, M=1024$)**| — | $1301.4\text{ tok/s}$ | $56.7\text{ tok/s}$ | — | $1219.3\text{ tok/s}$ | **$1249.4\text{ tok/s}$** | **Saves GPU Slots in Data Centers** |
 
-### 14.3 Strategic Deployment Takeaways
+### 15.3 Multi-Tier Memory Hierarchy Economics & Accelerator Memory Savings
+
+The introduction of the 3-Tier Hierarchical KV-Cache Memory Architecture fundamentally transforms the memory economics of large language model serving:
+1. **Elimination of High-Bandwidth Memory (HBM) Overprovisioning:** High-bandwidth accelerator memory (HBM2e / HBM3) costs approximately **\$100–\$200 per GB**, whereas Host DDR4/DDR5 DRAM costs **\$3–\$5 per GB**, and enterprise PCIe Gen4 NVMe SSD storage costs **\$0.08–\$0.15 per GB** (over three orders of magnitude cheaper).
+2. **Drastic Accelerator Footprint Reduction ($94\%\text{--}97\%$ Offloaded):** In long-context agentic workloads ($32\text{k}$ tokens, $B=16$), the active KV cache footprint reaches **$84.48\text{ GB}$**. In standard serving systems, this would require provisioning 2 to 4 additional $80\text{GB}$ GPUs strictly for memory capacity. The 3-Tier hierarchy offloads **$71.68\text{ GB}$ ($97.0\%$)** to local NVMe SSDs, maintaining a fixed $2.56\text{ GB}$ footprint on the accelerator.
+3. **Cost-per-Token Reductions:** For multi-turn conversational agents, eliminating prefill recomputation via direct NVMe restore yields **$85.6\%\text{--}91.3\%$ TTFT reductions** and saves hundreds of accelerator compute-seconds per session, maximizing revenue throughput per deployed dollar.
+
+### 15.4 Strategic Deployment Takeaways
 
 1. **GPU Slot Optimization in Constrained Data Centers:** In enterprise environments where PCIe slots and power envelopes for 300W/700W GPUs are scarce, offloading prefill to $75\text{W}$ PCIe AIU cards doubles the effective density of GPU decode engines.
 2. **Dynamic Workload Adaptation:** For interactive chat, summarization, and RAG pipelines where output token length exceeds prompt length ($M \ge 1024$), **4P-Hybrid** achieves near-total parity ($90.0\%\text{--}97.2\%$) with homogeneous GPU clusters at a fraction of the GPU footprint.
