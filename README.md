@@ -38,27 +38,28 @@ source setup/my-env-aiu-spyre.sh
 
 ## 2. Building the Spyre vLLM Container Image
 
-Build the vLLM + NIXL + Spyre stack image using OpenShift BuildConfigs or the provided build script.
+Build the vLLM + NIXL + Spyre container image using OpenShift BuildConfigs or the parameterized build script. Detailed specifications, build methods, and version comparison matrices are documented in [`docker/README.md`](docker/README.md).
 
-### Using the build script:
+### Image Version Selection (`v21` vs `v24`)
+
+| Version | Description | Target Image |
+|:---|:---|:---|
+| **`v21`** | Stable base (vLLM 0.28.0, PyTorch 2.5, TorchInductor SENDNN graph, `spyre-inference` pinned at commit `881a59d2`) | `vllm-spyre-nixl-latest:v21` |
+| **`v24`** *(Latest)* | Upstream HEAD (vLLM 0.33.0, PyTorch 2.6, MRV2 Attention & Shape Bucketers, latest C++ bindings) | `vllm-spyre-nixl-latest:v24` |
+
+### Using the parameterized build script:
 ```bash
 cd docker
-./build-vllm-spyre-nixl-latest.sh
+
+# Build v24 (latest stack)
+./build-vllm-spyre-nixl-latest.sh v24
+
+# Build v21 (pinned stable stack)
+./build-vllm-spyre-nixl-latest.sh v21
 ```
 
-This builds from `Dockerfile.vllm-spyre-nixl-latest` using:
-- **Base Image:** `spyre-inference-dev:latest`
-- **Model:** `ibm-granite/granite-4.2-8b` (served as `granite-8b`)
-- **vLLM:** 0.28.0
-- **spyre-inference:** dev521
-- **torch-spyre:** 336dad30
-- **NIXL:** v1.5.0 (`nixl` + `nixl-cu12` wheels)
-- **UCX:** 1.23.x (with `--enable-cma`)
-- **Connector:** Self-contained `SpyreNixlConnector` plugin pre-registered at import time
-- **Compile Timeout:** Pre-patched default `_COMPILE_TIMEOUT_S = 3600.0`
-
-The image is pushed to:
-`image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl-latest:v21`
+The script configures `Dockerfile.vllm-spyre-nixl-latest` with appropriate build arguments and pushes the image directly to your OpenShift internal registry:
+`image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/vllm-spyre-nixl-latest:${TAG}`
 
 ---
 

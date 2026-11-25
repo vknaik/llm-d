@@ -7,10 +7,16 @@ FROM ${BASE_IMAGE}
 
 USER root
 
-# Configuration - use UCX 1.23.x and NIXL v1.5.0
-ENV UCX_VERSION="1.23.x" \
+# Build arguments with defaults
+ARG UCX_VERSION="1.23.x"
+ARG NIXL_VERSION="v1.5.0"
+ARG SPYRE_INFERENCE_REPO="https://github.com/torch-spyre/spyre-inference.git"
+ARG SPYRE_INFERENCE_COMMIT="main"
+
+# Configuration - use UCX and NIXL
+ENV UCX_VERSION="${UCX_VERSION}" \
     UCX_INSTALL_PREFIX="/opt/ucx" \
-    NIXL_VERSION="v1.5.0" \
+    NIXL_VERSION="${NIXL_VERSION}" \
     NIXL_INSTALL_PREFIX="/opt/nixl"
 
 # Install system dependencies for UCX
@@ -98,13 +104,21 @@ RUN cd /tmp && \
 USER 1234:0
 WORKDIR /home/senuser
 
-# Clone and build spyre-inference using LATEST main branch (no pinning).
+# Build arguments for spyre-inference
+ARG SPYRE_INFERENCE_REPO="https://github.com/torch-spyre/spyre-inference.git"
+ARG SPYRE_INFERENCE_COMMIT="main"
+
+# Clone and build spyre-inference using configured branch/commit.
 # torch-spyre is loaded at runtime via the VLLM_PLUGINS=spyre_inference entry point.
 # spyre_inference/__init__.py sets TORCH_DEVICE_BACKEND_AUTOLOAD=0 before torch is
 # imported, which suppresses the backend autoload and avoids the circular-import
 # issue seen when importing torch_spyre directly. No uv.lock overrides are needed.
-RUN git clone https://github.com/torch-spyre/spyre-inference.git && \
+RUN git clone ${SPYRE_INFERENCE_REPO} && \
     cd spyre-inference && \
+    if [ "${SPYRE_INFERENCE_COMMIT}" != "main" ] && [ "${SPYRE_INFERENCE_COMMIT}" != "HEAD" ]; then \
+        echo "Checking out spyre-inference commit: ${SPYRE_INFERENCE_COMMIT}"; \
+        git checkout ${SPYRE_INFERENCE_COMMIT}; \
+    fi && \
     export SPYRE_COMMS_INSTALL_DIR=/opt/ibm/spyre/spyre-comms && \
     export PATH="${UCX_INSTALL_PREFIX}/bin:${NIXL_INSTALL_PREFIX}/bin:$PATH" && \
     export LD_LIBRARY_PATH="${UCX_INSTALL_PREFIX}/lib:${NIXL_INSTALL_PREFIX}/lib64:$LD_LIBRARY_PATH" && \
