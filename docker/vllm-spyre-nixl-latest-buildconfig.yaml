@@ -23,10 +23,10 @@ spec:
   resources:
     limits:
       cpu: "8"
-      memory: 16Gi
+      memory: 32Gi
     requests:
       cpu: "4"
-      memory: 8Gi
+      memory: 16Gi
   successfulBuildsHistoryLimit: 5
   failedBuildsHistoryLimit: 5
 ---

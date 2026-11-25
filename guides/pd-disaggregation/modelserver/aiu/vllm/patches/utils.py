@@ -36,10 +36,12 @@ EngineId = str
 BlockIds = tuple[list[int], ...] | list[list[int]]
 
 
-def get_kv_connector_cache_layout():
+def get_kv_connector_cache_layout(vllm_config: VllmConfig | None = None):
     # NOTE (NickLucche) When running disaggregated PD with NIXL, HND layout is
     # used for faster transfer.
-    vllm_config = get_current_vllm_config()
+    if vllm_config is None:
+        vllm_config = get_current_vllm_config()
+
     kv_config = vllm_config.kv_transfer_config
     if kv_config is not None:
         connector_cls = KVConnectorFactory.get_connector_class(kv_config)

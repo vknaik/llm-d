@@ -11,7 +11,7 @@ metadata:
     llm-d.ai/accelerator-variant: aiu
     llm-d.ai/accelerator-vendor: ibm
 spec:
-  replicas: 1
+  replicas: 4
   strategy:
     type: Recreate
     rollingUpdate: null
@@ -36,8 +36,8 @@ spec:
         kubernetes.io/hostname: p1-worker-63
       containers:
         - name: modelserver
-          image: image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl-latest:v21
-          imagePullPolicy: IfNotPresent
+          image: image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl-latest:v24
+          imagePullPolicy: Always
           command:
             - /bin/bash
             - -lc
@@ -45,9 +45,9 @@ spec:
             - |
               . /etc/bashrc-sentient-env.sh
               setup_multi_aiu_env
-              source /home/senuser/spyre-inference/.venv/bin/activate
+              export PATH="/home/senuser/spyre-inference/.venv/bin:/opt/ucx/bin:/opt/nixl/bin:$PATH"
               cp /shared-config/spyre-patch/spyre_connector.py /home/senuser/spyre-inference/spyre_inference/distributed/kv_transfer/kv_connector/v1/nixl/spyre_connector.py
-              vllm serve /model-cache/$MODEL_PATH \
+              /home/senuser/spyre-inference/.venv/bin/vllm serve /model-cache/$MODEL_PATH \
                 --host 0.0.0.0 \
                 --served-model-name $MODEL_NAME \
                 --port $VLLM_INFERENCE_PORT \
@@ -61,7 +61,8 @@ spec:
                 --disable-access-log-for-endpoints=/health,/metrics,/v1/models \
                 --enable-prefix-caching \
                 --dtype bfloat16 \
-                --no-disable-hybrid-kv-cache-manager
+                --no-disable-hybrid-kv-cache-manager \
+                --gpu-memory-utilization 0.35
           env:
             - name: HF_TOKEN
               valueFrom:

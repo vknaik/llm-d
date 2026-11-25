@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import importlib.metadata
-import json
+import logging
 import os
-from logging.config import dictConfig
-from typing import Any
+import signal
+import threading
 
 # Defer torch_spyre's autoload until we explicitly trigger it inside
 # `TorchSpyreWorker.init_device`. Autoload loads `libspyre_comms.so`,
@@ -39,14 +40,13 @@ def register():
     # legitimate spyre-inference env vars. Runs before vLLM arg_utils.py calls
     # validate_environ().
     try:
-        import os as _os
         import vllm.envs as _vllm_envs
         _SPYRE_ENV_VARS = {
             # Controls compile backend: 'eager' maps to --enforce-eager behaviour;
             # any other value (or unset) uses the default inductor path.
-            'VLLM_SPYRE_DYNAMO_BACKEND': lambda: _os.environ.get('VLLM_SPYRE_DYNAMO_BACKEND'),
+            'VLLM_SPYRE_DYNAMO_BACKEND': lambda: os.environ.get('VLLM_SPYRE_DYNAMO_BACKEND'),
             # Enable per-step performance metric logging (DEBUG t_token output).
-            'VLLM_SPYRE_PERF_METRIC_LOGGING_ENABLED': lambda: _os.environ.get('VLLM_SPYRE_PERF_METRIC_LOGGING_ENABLED'),
+            'VLLM_SPYRE_PERF_METRIC_LOGGING_ENABLED': lambda: os.environ.get('VLLM_SPYRE_PERF_METRIC_LOGGING_ENABLED'),
         }
         for _k, _v in _SPYRE_ENV_VARS.items():
             if _k not in _vllm_envs.environment_variables:
@@ -54,83 +54,117 @@ def register():
     except Exception:
         pass  # Gracefully degrade if vllm.envs layout changes
 
-    # Register Spyre-specific NIXL KV-transfer connectors so that
-    # --kv-connector SpyreNixlConnector is accepted by KVConnectorFactory.
-    try:
-        from vllm.distributed.kv_transfer.kv_connector.factory import (
-            KVConnectorFactory,
-        )
-        KVConnectorFactory.register_connector(
-            "SpyreNixlConnector",
-            "spyre_inference.distributed.kv_transfer.kv_connector.v1.nixl.spyre_connector",
-            "SpyreNixlConnector",
-        )
-    except Exception as e:
-        logger.error(f"Failed to register Spyre NIXL connectors: {e}", exc_info=True)
+    # vLLM resolves the platform during `import vllm`, before vllm.triton_utils is
+    # imported, which is the last point the Triton gate can act.
+    from vllm.logger import init_logger
 
-    return 'spyre_inference.platform.TorchSpyrePlatform'
+    from spyre_inference import envs
+    from spyre_inference.v1.worker.spyre import triton_gate
+
+    # vLLM's plugin probe swallows exceptions here and falls back to another platform,
+    # so errors are only logged; check_and_update_config rejects the resulting state.
+    try:
+        if triton_gate.wants_triton(envs.SPYRE_MODEL_RUNNER, envs.SPYRE_MRV2_KERNELS):
+            triton_gate.open()
+        else:
+            triton_gate.close()
+    except Exception:
+        init_logger(__name__).exception("Spyre Triton gate could not be applied")
+    # VllmConfig.__post_init__ reads use_v2_model_runner before the platform hook.
+    pin_model_runner(envs.SPYRE_MODEL_RUNNER)
+    # flex and torch-spyre read these once, when the device runtime starts on the first
+    # device op in each worker, which is after this runs; an explicit value still wins.
+    # Preferred on a PF device only, not on a VF.
+    if os.environ.get("FLEX_DEVICE") == "PF":
+        for name in ("SPYRE_HAZARD_TRACKER", "SPYRE_HAZARD_COMPLETED_READS"):
+            os.environ.setdefault(name, "1")
+
+    return "spyre_inference.platform.TorchSpyrePlatform"
+
+
+def pin_model_runner(runner: str) -> None:
+    """Point VLLM_USE_V2_MODEL_RUNNER at SPYRE_MODEL_RUNNER's choice.
+
+    Pinned for v1 too: use_v2_model_runner returns an explicit value before its
+    HAS_TRITON fallback, and vLLM's own heuristics can otherwise still pick V2.
+    """
+    want = "1" if runner == "v2" else "0"
+    current = os.environ.get("VLLM_USE_V2_MODEL_RUNNER")
+    if current not in (None, "", want):
+        from vllm.logger import init_logger
+
+        init_logger(__name__).warning(
+            "SPYRE_MODEL_RUNNER=%s picks the model runner; overriding "
+            "VLLM_USE_V2_MODEL_RUNNER=%s to %s.",
+            runner,
+            current,
+            want,
+        )
+    os.environ["VLLM_USE_V2_MODEL_RUNNER"] = want
+
+
+@contextlib.contextmanager
+def keep_sigterm_handler():
+    """Restore the SIGTERM handler that loading senlib (via ``torch_spyre._C``) replaces.
+
+    senlib's handler exits at once, while vLLM's shuts the engine's workers down; without
+    it they outlive the engine and keep the card. By default ``import torch`` loads senlib
+    before vLLM installs its handler, so this only matters with
+    ``TORCH_DEVICE_BACKEND_AUTOLOAD=0``, where senlib loads inside these blocks.
+    senlib's crash handlers (SIGSEGV, SIGABRT, ...) are left in place.
+    """
+    on_main_thread = threading.current_thread() is threading.main_thread()
+    handler = signal.getsignal(signal.SIGTERM) if on_main_thread else None
+    try:
+        yield
+    finally:
+        if handler is not None:
+            signal.signal(signal.SIGTERM, handler)
 
 
 def register_ops():
-    """Register the Spyre OOT custom ops and Transformers backend."""
-    from vllm.model_executor.models import ModelRegistry
-
+    """Register the Spyre OOT custom ops and model adaptations."""
     from spyre_inference.custom_ops import register_all
+    from spyre_inference.models import register_models
 
-    register_all()
+    with keep_sigterm_handler():
+        register_all()
+        register_models()
 
-    # So that ``model_impl="transformers"`` picks up the Spyre RoPE adaptation.
-    ModelRegistry.register_model(
-        "TransformersForCausalLM",
-        "spyre_inference.transformers_backend:SpyreTransformersForCausalLM",
-    )
+
+def _route_logging() -> None:
+    """Parent ``spyre_inference`` under ``vllm``, unless a logging config gave it
+    handlers of its own: it then owns its routing, and propagating into ``vllm`` too
+    would print each record twice."""
+    ours = logging.getLogger("spyre_inference")
+    ours.parent = logging.root if ours.handlers else logging.getLogger("vllm")
 
 
 def _init_logging():
-    """Setup logging, extending from the vLLM logging config"""
-    from vllm.envs import VLLM_CONFIGURE_LOGGING, VLLM_LOGGING_CONFIG_PATH
-    from vllm.logger import DEFAULT_LOGGING_CONFIG, init_logger
+    """Route our loggers through vLLM's ``vllm`` logger."""
+    import vllm.logger as vllm_logger
 
-    global logger
-    logger = init_logger(__name__)
+    _route_logging()
 
-    config: dict[str, Any] = {}
+    configure = vllm_logger._configure_vllm_root_logger
+    if getattr(configure, "_spyre_patched", False):
+        return
 
-    if VLLM_CONFIGURE_LOGGING:
-        config = {**DEFAULT_LOGGING_CONFIG}
+    def _configure(*args, **kwargs):
+        ours = [
+            lg
+            for name, lg in logging.root.manager.loggerDict.items()
+            if isinstance(lg, logging.Logger)
+            and (name == "spyre_inference" or name.startswith("spyre_inference."))
+            and not lg.disabled
+        ]
+        configure(*args, **kwargs)
+        for lg in ours:
+            lg.disabled = False
+        _route_logging()
 
-    if VLLM_LOGGING_CONFIG_PATH:
-        # Error checks must already be done in vllm.logger
-        with open(VLLM_LOGGING_CONFIG_PATH, encoding="utf-8") as file:
-            config = json.loads(file.read())
-
-    if VLLM_CONFIGURE_LOGGING:
-        # Copy the vLLM logging configurations for our package
-        if "spyre_inference" not in config["formatters"]:
-            if "vllm" in config["formatters"]:
-                config["formatters"]["spyre_inference"] = config["formatters"]["vllm"]
-            else:
-                config["formatters"]["spyre_inference"] = DEFAULT_LOGGING_CONFIG["formatters"][
-                    "vllm"
-                ]
-
-        if "spyre_inference" not in config["handlers"]:
-            if "vllm" in config["handlers"]:
-                handler_config = config["handlers"]["vllm"]
-            else:
-                handler_config = DEFAULT_LOGGING_CONFIG["handlers"]["vllm"]
-            handler_config["formatter"] = "spyre_inference"
-            config["handlers"]["spyre_inference"] = handler_config
-
-        if "spyre_inference" not in config["loggers"]:
-            if "vllm" in config["loggers"]:
-                logger_config = config["loggers"]["vllm"]
-            else:
-                logger_config = DEFAULT_LOGGING_CONFIG["loggers"]["vllm"]
-            logger_config["handlers"] = ["spyre_inference"]
-            config["loggers"]["spyre_inference"] = logger_config
-
-    dictConfig(config)
+    _configure._spyre_patched = True
+    vllm_logger._configure_vllm_root_logger = _configure
 
 
 _init_logging()

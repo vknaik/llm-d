@@ -3,7 +3,7 @@
 ### Platform: Red Hat OpenShift Container Platform 4.20.36 + llm-d + NIXL 1.5.0 + vLLM 0.28.0
 
 **Authors:** vkn & Bob (AI Assistant)
-**Date:** November 16, 2026
+**Date:** November 23, 2026
 **Cluster:** `llm-d.spyre` (OpenShift 4.20.36) | Namespaces: `llm-d-on-aiu` & `llm-d-on-gpu`
 **Model:** `ibm-granite/granite-4.2-8b` (served as `granite-8b`, bfloat16, 40 layers, GQA 8 KV heads)
 
@@ -82,6 +82,9 @@ This report presents the end-to-end benchmarking, comparative analysis, and oper
     - [A.3 Host Memory Requirements & Staging Buffer Sizing Across Configurations](#a-3)
     - [A.4 Engine Startup Time, JIT Graph Compilation & Cache Lifecycle Analysis](#a-4)
     - [A.5 Experimental Design, Harness Architecture & Measurement Methodology](#a-5)
+    - [A.6 Build History](#a-6)
+      - [A.6.1 Building vllm-spyre-nixl-latest:v21 using the spyre-inference-dev:latest base image (Date: 10/08/2026)](#a-6-1)
+      - [A.6.2 Building vllm-spyre-nixl-latest:v24 using the latest spyre-inference image (Date: 11/20/2026)](#a-6-2)
 
 
 ---
@@ -111,8 +114,8 @@ The benchmarks evaluated in this study were conducted on a production-grade Red 
 | **Cluster OS / Orchestration** | Red Hat OpenShift Container Platform **4.20.36** | Red Hat OpenShift Container Platform **4.20.36** |
 | **Base Container Image** | `vllm-spyre-nixl-latest:v20` / `v21` | `vllm-openai:v0.6.3` / `vllm:0.28.0` |
 | **vLLM Engine Core** | vLLM **0.28.0** (`vllm.platform_plugins.spyre_inference`) | vLLM **0.28.0** (`vllm.platform_plugins.cuda`) |
-| **Hardware Driver & Runtime** | IBM Spyre Driver 1.3.0 + SENDNN Runtime | NVIDIA CUDA 12.4 / 13.0 + Driver 550.54.15 |
-| **PyTorch Execution Backend** | PyTorch 2.5.0 + TorchInductor SENDNN Static Graph | PyTorch 2.13.0+cu130 + FlashAttention-2 |
+| **Hardware Driver & Runtime** | IBM Spyre Driver (senlib 2.0.0_rc.3 / Operator 1.4.0) + Sentient Runtime (flex 2.0.0 / sentinyexec 2.0.0) | NVIDIA CUDA 12.4 / 13.0 + Driver 550.54.15 |
+| **PyTorch Execution Backend** | PyTorch 2.5 (2.13.0+cpu) + TorchInductor (torch-spyre SENDNN Static Graph) | PyTorch 2.13.0+cu130 + FlashAttention-2 |
 | **NIXL Protocol & Libraries** | `nixl` **v1.5.0** (commit `8708e35e`, Python bindings in `/opt/nixl`, `nixl-1.5.0-py3-none-any.whl`) | `nixl` **v1.5.0** + `nixl-cu12` / `nixl-cu13` **v1.5.0** (commit `8708e35e`, CUDA IPC + Host Staging DMA) |
 | **Inter-Node Transport Layer** | UCX 1.19.0 (TCP, Shared Memory, Posix) | UCX 1.19.0 (TCP, CUDA-IPC, Posix) |
 | **Model Evaluated** | `ibm-granite/granite-4.2-8b` ($8\text{B}$, bfloat16) | `ibm-granite/granite-4.2-8b` ($8\text{B}$, bfloat16) |
@@ -530,33 +533,32 @@ To characterize throughput scaling under concurrent workloads, multi-stream stre
 
 ```mermaid
 %%{init: {'themeVariables': {'fontSize': '12px', 'fontFamily': 'IBM Plex Sans, sans-serif'}}}%%
-graph TD
+flowchart LR
     subgraph Standalone_TP1 [Exp A: Standalone TP=1]
+        direction TB
         A1[B=1: 7.2 tok/s] --> A2[B=2: 13.0 tok/s]
         A2 --> A4[B=4: 23.3 tok/s]
         A4 --> A8[B=8: 37.5 tok/s]
         A8 --> A16[B=16: 56.4 tok/s]
     end
-```
-```mermaid
-%%{init: {'themeVariables': {'fontSize': '12px', 'fontFamily': 'IBM Plex Sans, sans-serif'}}}%%
-graph TD
+
     subgraph Disagg_TP1 [Exp C: TP=1 PD Disagg Gateway]
+        direction TB
         C1[B=1: 6.1 tok/s] --> C2[B=2: 11.4 tok/s]
         C2 --> C4[B=4: 21.3 tok/s]
         C4 --> C8[B=8: 36.8 tok/s]
         C8 --> C16[B=16: 61.9 tok/s]
     end
-```
-```mermaid
-%%{init: {'themeVariables': {'fontSize': '12px', 'fontFamily': 'IBM Plex Sans, sans-serif'}}}%%
-graph TD
+
     subgraph Disagg_TP2 [Exp D: TP=2 PD Disagg Gateway]
+        direction TB
         D1[B=1: 3.4 tok/s] --> D2[B=2: 10.8 tok/s]
         D2 --> D4[B=4: 17.8 tok/s]
         D4 --> D8[B=8: 24.6 tok/s]
         D8 --> D16[B=16: 32.2 tok/s]
     end
+
+    Standalone_TP1 ~~~ Disagg_TP1 ~~~ Disagg_TP2
 ```
 
 1. **Exp C Outperforms Exp A at Scale ($B=16$):**
@@ -1704,9 +1706,9 @@ Following the evaluation of **(2P-Spyre AIU + 1D-A100 GPU)** serving in Section 
 
 ### 12.2 Benchmark Results (4P-Spyre AIU + 1D-A100 GPU)
 
-#### Table 12.1 — Full 20-Configuration Batch Scaling Benchmark Results (4P-Spyre AIU + 1D-A100 GPU)
+#### Table 12.1 — Full 20-Configuration Batch Scaling Benchmark Results (4P-Spyre AIU + 1D-A100 GPU, v21 Image Baseline)
 
-All 20 configurations were evaluated with **10 independent iterations per setting** (200 streaming requests total) serving `ibm-granite/granite-4.2-8b` (`granite-8b`). Values represent **mean $\pm$ standard deviation**:
+All 20 configurations were evaluated with **10 independent iterations per setting** (200 streaming requests total) serving `ibm-granite/granite-4.2-8b` (`granite-8b`) on the v21 image baseline. Values represent **mean $\pm$ standard deviation**:
 
 | Prompt Length | Max Tokens | Concurrency ($B$) | Mean TTFT (s) | Mean Wall Time (s) | Aggregate tok/s | Post-TTFT tok/s |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -1731,6 +1733,33 @@ All 20 configurations were evaluated with **10 independent iterations per settin
 | **128** | **200** | 8 | $1.249 \pm 0.010$ | $4.718 \pm 0.014$ | $339.10 \pm 1.04$ | $78.41 \pm 0.12$ |
 | **128** | **200** | 16 | $2.327 \pm 0.010$ | $6.877 \pm 0.018$ | **$465.30 \pm 1.19$** | $77.57 \pm 0.16$ |
 
+#### Table 12.1a — Full 20-Configuration Batch Scaling Benchmark Results (4P-Spyre AIU + 1D-A100 GPU, v24 Image Stack)
+
+All 20 configurations were evaluated with **10 independent iterations per setting** (200 streaming requests total) serving `ibm-granite/granite-4.2-8b` (`granite-8b`) on the upgraded `vllm-spyre-nixl-latest:v24` stack (Date: 11/20/2026). Values represent **mean $\pm$ standard deviation**:
+
+| Prompt Length | Max Tokens | Concurrency ($B$) | Mean TTFT (s) | Mean Wall Time (s) | Aggregate tok/s | Post-TTFT tok/s |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **16** | **50** | 1 | $0.343 \pm 0.002$ | $0.955 \pm 0.002$ | $52.37 \pm 0.11$ | $80.15 \pm 0.15$ |
+| **16** | **50** | 2 | $0.499 \pm 0.001$ | $1.267 \pm 0.001$ | $78.92 \pm 0.08$ | $80.14 \pm 0.07$ |
+| **16** | **50** | 4 | $0.803 \pm 0.003$ | $1.869 \pm 0.003$ | $107.03 \pm 0.19$ | $79.91 \pm 0.15$ |
+| **16** | **50** | 8 | $1.398 \pm 0.002$ | $3.053 \pm 0.005$ | $131.04 \pm 0.20$ | $79.76 \pm 0.17$ |
+| **16** | **50** | 16 | $2.580 \pm 0.003$ | $5.414 \pm 0.003$ | $147.75 \pm 0.10$ | $79.68 \pm 0.07$ |
+| **16** | **200** | 1 | $0.342 \pm 0.003$ | $2.842 \pm 0.003$ | $70.36 \pm 0.07$ | $79.61 \pm 0.01$ |
+| **16** | **200** | 2 | $0.498 \pm 0.000$ | $3.151 \pm 0.001$ | $126.95 \pm 0.03$ | $79.76 \pm 0.01$ |
+| **16** | **200** | 4 | $0.801 \pm 0.001$ | $3.761 \pm 0.004$ | $212.69 \pm 0.24$ | $79.23 \pm 0.02$ |
+| **16** | **200** | 8 | $1.397 \pm 0.001$ | $4.959 \pm 0.005$ | $322.68 \pm 0.31$ | $78.70 \pm 0.08$ |
+| **16** | **200** | 16 | $2.584 \pm 0.004$ | $7.331 \pm 0.006$ | **$436.51 \pm 0.35$** | $78.21 \pm 0.01$ |
+| **128** | **50** | 1 | $0.379 \pm 0.028$ | $0.995 \pm 0.028$ | $50.27 \pm 1.33$ | $79.60 \pm 0.12$ |
+| **128** | **50** | 2 | $0.535 \pm 0.002$ | $1.321 \pm 0.002$ | $75.71 \pm 0.11$ | $79.68 \pm 0.02$ |
+| **128** | **50** | 4 | $0.861 \pm 0.002$ | $1.961 \pm 0.002$ | $102.01 \pm 0.09$ | $79.64 \pm 0.11$ |
+| **128** | **50** | 8 | $1.499 \pm 0.003$ | $3.230 \pm 0.004$ | $123.82 \pm 0.16$ | $79.61 \pm 0.08$ |
+| **128** | **50** | 16 | $2.773 \pm 0.002$ | $5.782 \pm 0.004$ | $138.37 \pm 0.10$ | $79.66 \pm 0.02$ |
+| **128** | **200** | 1 | $0.365 \pm 0.001$ | $2.874 \pm 0.001$ | $69.59 \pm 0.03$ | $79.34 \pm 0.01$ |
+| **128** | **200** | 2 | $0.535 \pm 0.001$ | $3.206 \pm 0.001$ | $124.78 \pm 0.05$ | $79.64 \pm 0.01$ |
+| **128** | **200** | 4 | $0.858 \pm 0.002$ | $3.859 \pm 0.007$ | $207.33 \pm 0.37$ | $79.12 \pm 0.01$ |
+| **128** | **200** | 8 | $1.499 \pm 0.003$ | $5.142 \pm 0.006$ | $311.19 \pm 0.35$ | $78.60 \pm 0.02$ |
+| **128** | **200** | 16 | $2.777 \pm 0.004$ | $7.696 \pm 0.004$ | **$415.72 \pm 0.32$** | $78.29 \pm 0.04$ |
+
 ---
 
 ### 12.3 Multi-Way Architecture Scaling Matrix
@@ -1744,6 +1773,7 @@ All 20 configurations were evaluated with **10 independent iterations per settin
 | **Disagg 1P-Spyre Hybrid** (Section 9) | 1P-Spyre + 1D-A100 | 1 AIU + 1 GPU ($375\text{W}$) | $565.13\text{ tok/s}$ | $1.660\text{ s}$ | $462.47\text{ tok/s}$ | $2.350\text{ s}$ | $612.30\text{ tok/s}$ |
 | **Disagg 2P-Spyre Hybrid** (Section 11) | 2P-Spyre + 1D-A100 | 2 AIU + 1 GPU ($450\text{W}$) | $608.03\text{ tok/s}$ | $1.355\text{ s}$ | $465.66\text{ tok/s}$ | $2.324\text{ s}$ | $684.10\text{ tok/s}$ |
 | **Disagg 4P-Spyre Hybrid** (Section 12) | 4P-Spyre + 1D-A100 | 4 AIU + 1 GPU ($600\text{W}$) | **$621.52\text{ tok/s}$** | **$1.279\text{ s}$** | **$465.30\text{ tok/s}$** | **$2.327\text{ s}$** | **$705.00\text{ tok/s}$** 🚀 |
+| **Disagg 4P-Spyre Hybrid (V24 image)** | 4P-Spyre + 1D-A100 | 4 AIU + 1 GPU ($600\text{W}$) | **$436.51\text{ tok/s}$** | **$2.584\text{ s}$** | **$415.72\text{ tok/s}$** | **$2.777\text{ s}$** | **$436.80\text{ tok/s}$** |
 | **Disagg Spyre-Only TP=1** (Section 4 / 5) | 1P-Spyre + 1D-Spyre | 2 AIUs ($150\text{W}$) | $3.50\text{ tok/s}$ | $0.250\text{ s}$ | $3.40\text{ tok/s}$ | $0.350\text{ s}$ | $3.55\text{ tok/s}$ |
 | **Disagg Spyre-Only TP=2** (Section 3 / 4 / 5) | 2P-Spyre + 2D-Spyre | 4 AIUs ($300\text{W}$) | $5.48\text{ tok/s}$ | $2.690\text{ s}$ | $5.15\text{ tok/s}$ | $2.950\text{ s}$ | $6.15\text{ tok/s}$ |
 
@@ -2880,4 +2910,115 @@ To ensure reproducibility and eliminate transient cold-cache noise:
 - Every deployment underwent a minimum of 2 complete warm-up request cycles before benchmark recording.
 - All grid configurations and Poisson runs were executed across **10 independent iterations** ($N=10$).
 - All reported metrics specify sample means alongside sample standard deviations ($\mu \pm \sigma$).
+
+---
+
+### A.6 Build History {#a-6}
+
+#### A.6.1 Building vllm-spyre-nixl-latest:v21 using the spyre-inference-dev:latest base image (Date: 10/08/2026) {#a-6-1}
+
+##### 1. Context and Motivation
+On October 8, 2026, the `vllm-spyre-nixl-latest:v21` container image was built and released to upgrade the networking, KV transfer, and AIU inference stack to **NIXL v1.5.0** and **UCX 1.23.x**, while integrating a self-contained in-tree `SpyreNixlConnector` plugin directly into the image. This eliminated the previous manual runtime file-copying patches (`base_worker.py` and `utils.py` from shared PVCs) during pod initialization.
+
+##### 2. Build Pipeline & Image Generation Steps
+The build was executed on OpenShift via the BuildConfig pipeline using the local build script:
+
+```bash
+# Working directory: ~/llm-d/llm-d/docker
+./build-vllm-spyre-nixl-latest.sh v21
+```
+
+The Dockerfile (`docker/Dockerfile.vllm-spyre-nixl-latest`) executes the following stages on top of the base image:
+
+1. **Base Image Pull:** Uses `ARG BASE_IMAGE=us.icr.io/wxpe-cicd-internal/amd64/spyre-inference-dev:latest`.
+2. **System Dependencies:** Installs `wget`, `git`, `automake`, `autoconf`, `libtool`, `rdma-core-devel`, `libibverbs-devel`, `librdmacm-devel`, `numactl-libs`, and `numactl-devel` via `dnf`.
+3. **UCX 1.23.x Compilation:** Clones `https://github.com/openucx/ucx.git` (`branch v1.23.x`), builds with `--enable-shared --enable-optimizations --enable-cma --enable-devel-headers --with-verbs --with-dm --enable-mt`, and installs into `/opt/ucx`.
+4. **NIXL v1.5.0 Compilation:** Clones `https://github.com/ai-dynamo/nixl.git` (`branch v1.5.0`), builds native bindings with Meson/Ninja against `/opt/ucx`, builds wheels via `python3 -m build`, and installs `/opt/nixl/wheels/*.whl` into `/opt/nixl`.
+5. **Spyre-Inference & Plugin Setup:** As `senuser` (UID 1234), clones `https://github.com/torch-spyre/spyre-inference.git` (HEAD `main`), runs `uv sync`, and installs the compiled NIXL wheels.
+6. **In-Tree Connector Patches:** Copies `patches/spyre_inference/` into `/home/senuser/spyre-inference/spyre_inference/`, deploying `SpyreNixlConnectorWorker` and plugin auto-registration.
+7. **Inductor Compile Timeout Patch:** Patches `_COMPILE_TIMEOUT_S = 3600.0` in `torch_spyre/execution/async_compile.py`.
+8. **Registry Tagging:** The image is pushed to OpenShift internal registry `image-registry.openshift-image-registry.svc:5000/llm-d-on-aiu/vllm-spyre-nixl-latest:v21` and tagged `latest` (`sha256:d875dd5f01aefb891f08d15a3423d27e033723028157bd43da29ea47939aa852` / `sha256:902a599cf66007bd199e7505935abff910eac4ab1a851347f63d06c4a343b2a0`).
+
+##### 3. Component Source Commits in Base Image (`spyre-inference-dev:latest`)
+
+* **Jenkins CI Build:** `Spyre/component-build` Build **#39459**
+* **Artifact Name / ID:** `spyre-backend-dev` / `575431a6-7040-5083-91a5-a53547122f59` (short: `073e21a33be0`)
+* **Image Identity SHA:** `073e21a33be0b2e2eec499d4762d9892c009e838d1c7de89e503e666eef57ad0`
+* **Pin Channel / Epoch:** `default` / `6436`
+* **Base OS:** Red Hat Universal Base Image 10.1 (`vcs-ref`: `9e766e45d728d4c3581d3f9bddd047fb7c166746`)
+
+| Component | Repository / Mode | Git Commit SHA / Source Ref | Package NEVRA / Version |
+|:---|:---|:---:|:---|
+| **`spyre-frameworks` (src)** | `https://github.ibm.com/ai-sw-acceleration/spyre-frameworks.git` | `96a27c1271f82626f1a65561c893399c97b8483e` | — |
+| **`spyre_common_headers`** | `https://github.ibm.com/ai-chip-toolchain/spyre_common_headers.git` | `8ff39153f664b8a9b025748264e3b6e3d52ff3ce` | — |
+| **`ibm-deeptools`** | `sys-ai-sw-accel-team-rpm-local` | `4878239bd06424fda05459cc5766ec101b215911` | `ibm-deeptools-*.a1e550b1cd82.x86_64` (`2.0.0_rc.1-0.master.169`) |
+| **`ibm-senlib-core` / `dd2`** | `sys-ai-sw-accel-team-rpm-local` | `a6d8f22c8c35acf4681e666b36961c911865d794` | `ibm-senlib-core-*.63fa03ae62a5.x86_64` (`2.0.0_rc.3-0.main.19`) |
+| **`ibm-flex`** | `https://github.ibm.com/ai-chip-toolchain/flex.git` | `366ee4f426f3e6bf666f82f0bab887b99c3b3bf6` | `ibm-flex-*.72d49b84150d.x86_64` (`2.0.0_rc.1-0.main.49`) |
+| **`ibm-spyre-comms`** | `https://github.ibm.com/ai-chip-toolchain/spyre-comms.git` | `534a94998cb22fe133acfaaa2adf53f7737729fd` | `ibm-spyre-comms-*.17a19fc058e9.x86_64` |
+| **`ibm-aiu-toolbox-e2e`** | `https://github.ibm.com/ai-chip-toolchain/aiu-toolbox.git` | `a2b6d58fd512db3e5086f6ae6d00ceb9863818f5` | `ibm-aiu-toolbox-*.73358840a77f.x86_64` (`2.0.0_rc.3-0.main.0`) |
+| **`ibm-libaiupti`** | `https://github.ibm.com/ai-chip-toolchain/libaiupti.git` | `ffb7877c280c4042d9906cca3f509e804d9cf6d4` | `ibm-libaiupti-*.1cdbeb34d35e.x86_64` (`2.0.0_rc.2-0.main.6`) |
+| **`ibm-sentinyexec`** | `sys-ai-sw-accel-team-rpm-local` | `78661c7451a30d9574b4a17bc2e45e2d976c132b` | `ibm-sentinyexec-*.c29543860847.x86_64` (`2.0.0_rc.3-0.master.73`) |
+| **`ibm-aiu-monitor`** | `sys-ai-sw-accel-team-rpm-local` | `8746a1eccb2043a9c0b52793f298cdb8013003d5` | `ibm-aiu-monitor-*.01ca1c3e1dea.x86_64` |
+| **`llvm`** | Generic artifact | `llvmorg-22.1.3` | `llvm-source-llvmorg-22.1.3-080ddeea9a07.tgz` |
+
+##### 4. Cloned and Built Layer Commits in `vllm-spyre-nixl-latest:v21`
+
+| Package / Repository | Source / Origin | Git Commit SHA / Tag | Installed Version |
+|:---|:---|:---:|:---|
+| **`spyre-inference`** | `https://github.com/torch-spyre/spyre-inference.git` (`main`) | `881a59d284dd6c225d09c416545766a1718a2f09` | `0.6.0.dev52+main.g881a59d2` |
+| **`torch-spyre`** | Submodule / pinned via `uv.lock` (PR #1183) | `812af57d0` | `0.6.0.dev107+master.g812af57d` |
+| **`vllm`** | Upstream vLLM package via uv | `v0.28.0` | `0.28.0+empty` |
+| **`nixl`** | `https://github.com/ai-dynamo/nixl.git` | `v1.5.0` (`8708e35e`) | `1.5.0` (`nixl` & `nixl-cu12`) |
+| **`ucx`** | `https://github.com/openucx/ucx.git` | `v1.23.x` | `1.23.0` |
+| **`torch`** | PyTorch CPU base | `v2.13.0` | `2.13.0+cpu` |
+
+##### 5. Git Commit Reference to Rebuild v21 (`llm-d-on-spyre` Branch)
+To reproduce or rebuild the exact configuration of `vllm-spyre-nixl-latest:v21` and its corresponding deployment overlays, use the following git commit reference in the `https://github.com/vknaik/llm-d` repository:
+
+* **Repository:** `https://github.com/vknaik/llm-d`
+* **Branch:** `llm-d-on-spyre`
+* **Target Build Commit:** **`7e07e63aba8ea885366a6b615412bfe84904f13c`** (`7e07e63a`)
+  *Commit Message:* `feat(spyre): support v21 image with NIXL v1.5.0, self-contained connector, and Granite-4.2-8B`
+* **Key Supporting Commits:**
+  * `af59f971`: `fix(spyre): use mixin + NixlPull/PushConnectorWorker subclasses to pass isinstance checks`
+  * `9557cf1e`: `fix(spyre): add kv_connector_module_path to bypass KVConnectorFactory registry`
+  * `286e7340`: `feat(spyre/tp1): apply SpyreNixlConnector patch to tp1 prefill/decode manifests`
+  * `276d6e27`: `feat(spyre): replace base_worker.py patch with SpyreNixlConnectorWorker subclass`
+
+---
+
+#### A.6.2 Building vllm-spyre-nixl-latest:v24 using the latest spyre-inference image (Date: 11/20/2026) {#a-6-2}
+
+##### 1. Context and Motivation
+On November 20, 2026, the prefill and decode infrastructure was upgraded to the latest `vllm-spyre-nixl-latest:v24` container image incorporating the newest `spyre-inference` upstream stack (PyTorch 2.6 / torch-spyre with MRV2 Attention & Shape Bucketers, vLLM 0.33.0, NIXL v1.5.0, UCX 1.23.x). During deployment and testing of the 4P heterogeneous hybrid deployment (`pd-disaggregation-hybrid-spyre-aiu-vllm-prefill` in namespace `llm-d-on-gpu`), several breaking API signature and data structure changes across the upstream vLLM 0.33.0 / NIXL v1.5.0 boundary were diagnosed and resolved.
+
+##### 2. Key Upstream Architectural & API Changes Resolved
+
+1. **`TransferTopology` Attribute Refactoring (`AttributeError: 'TransferTopology' object has no attribute 'cross_layers_blocks'`):**
+   - **Root Cause:** In vLLM 0.33.0, `TransferTopology` internal attributes were reorganized, removing the direct `cross_layers_blocks` attribute on certain initialization paths. When `spyre_connector.py` invoked `compute_nixl_compatibility_hash()`, it failed with an `AttributeError`.
+   - **Resolution:** Added defensive kwargs introspection and safe attribute retrieval with fallback:
+     ```python
+     cross_layers = getattr(self.transfer_topo, "cross_layers_blocks", getattr(self.transfer_topo, "_cross_layers_blocks", False))
+     ```
+
+2. **`NixlAgentMetadata` Constructor Alignment (`TypeError: NixlAgentMetadata.__init__() missing 1 required positional argument: 'block_strides'`):**
+   - **Root Cause:** NIXL v1.5.0 / vLLM 0.33.0 updated the `NixlAgentMetadata` dataclass / constructor signature to require explicit `block_strides` (or `block_stride_per_layer`), rather than inferring strides internally.
+   - **Resolution:** Updated `spyre_connector.py` to inspect the `NixlAgentMetadata.__init__` parameter signature dynamically at runtime. If `block_strides` is expected, it populates `metadata_kwargs["block_strides"]` directly from `self.block_stride_per_layer` (or `self.block_len_per_layer`).
+
+3. **Multi-Region Descriptor Sizing (`IndexError: list index out of range` on `self.region_num_blocks` / `self.region_mem_types`):**
+   - **Root Cause:** In vLLM 0.33.0 / NIXL v1.5.0, `register_local_xfer_handler` and `_build_fa_local` expect `self.block_stride_per_layer`, `self.region_num_blocks`, and `self.region_mem_types` to contain entries indexed for every registered staging memory region.
+   - **Resolution:** Updated `_SpyreRegisterKVCachesMixin.register_kv_caches()` in `spyre_connector.py` to populate and append entries to `self.block_stride_per_layer`, `self.region_num_blocks`, and `self.region_mem_types` for all 40 CPU staging buffers (1 per transformer layer: `shape=(1373, 2, 8, 64, 128)`).
+
+4. **Delegated Local Descriptor Handler Registration:**
+   - **Root Cause:** Manual low-level invocation of `_build_fa_local` and `prep_xfer_dlist` bypassed upstream NIXL v1.5.0 handle initialization and serialization checks.
+   - **Resolution:** Refactored `register_kv_caches` to delegate directly to `self.register_local_xfer_handler(self.block_size)` provided by `NixlBaseConnectorWorker`, ensuring compatibility with upstream handle formats and fast memory registration.
+
+5. **Heterogeneous KV Cache Layout Synchronization (`kv_cache_layout="HND"`):**
+   - **Root Cause:** Upstream vLLM 0.33.0 defaults `base_worker.py` layout detection to `"LBHNC"`. When prefill sent its handshake payload to the GPU decode pod (running vLLM with `HND` FlashAttention layout), decode rejected the handshake with `RuntimeError: Heterogeneous TP expects same kv_cache_layout`.
+   - **Resolution:** Explicitly set `self.kv_cache_layout = "HND"`, `self.host_buffer_kv_cache_layout = "HND"`, and `agent_metadata.kv_cache_layout = "HND"` during Packed HND mode registration, matching the `(num_blocks, 2, num_kv_heads, block_size, head_size)` memory layout across heterogeneous devices.
+
+6. **Runtime Verification & Startup Performance:**
+   - With all patches applied to ConfigMap `spyre-connector-patch` and synchronized into `guides/pd-disaggregation/modelserver/aiu/vllm/patches/` and `docker/patches/`:
+     - CPU staging KV cache registration completed across all 40 layers in **0.334s** (and 0.996s on warm restart).
+     - All 4 prefill pods compiled SendNN attention variants during MRV2 warmup and transitioned to `1/1 Ready` with 0 restarts.
 

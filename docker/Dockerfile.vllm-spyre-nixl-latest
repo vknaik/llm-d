@@ -110,17 +110,17 @@ RUN git clone https://github.com/torch-spyre/spyre-inference.git && \
     export LD_LIBRARY_PATH="${UCX_INSTALL_PREFIX}/lib:${NIXL_INSTALL_PREFIX}/lib64:$LD_LIBRARY_PATH" && \
     export PKG_CONFIG_PATH="${UCX_INSTALL_PREFIX}/lib/pkgconfig:$PKG_CONFIG_PATH" && \
     export PYTHONPATH="${NIXL_INSTALL_PREFIX}/lib64/python3.12/site-packages:$PYTHONPATH" && \
+    export MAX_JOBS=4 && \
     uv sync 2>&1 | tee /home/senuser/spyre-inference-build.log && \
     uv pip install --no-deps /opt/nixl/wheels/*.whl && \
     echo "spyre-inference built and installed successfully with NIXL wheels"
 
 # Copy Spyre NIXL connector patches and vLLM utils directly into spyre-inference & venv
 COPY --chown=1234:0 patches/spyre_inference/ /home/senuser/spyre-inference/spyre_inference/
-COPY --chown=1234:0 patches/utils.py /home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/vllm/distributed/kv_transfer/kv_connector/utils.py
 
 # Patch torch_spyre compile timeout default
 RUN sed -i 's/_COMPILE_TIMEOUT_S = 60.0/_COMPILE_TIMEOUT_S = 3600.0/' \
-    /home/senuser/spyre-inference/.venv/lib64/python3.12/site-packages/torch_spyre/execution/async_compile.py 2>/dev/null || true
+    /home/senuser/spyre-inference/.venv/lib/python3.12/site-packages/torch_spyre/execution/async_compile.py 2>/dev/null || true
 
 # Back to root for final permissions setup
 USER root
